@@ -128,6 +128,7 @@ class ProfileStickerAvatarCodecSmokeTest {
         val binary = checkNotNull(executable)
         val folder = Files.createTempDirectory("synthetic-vfr-avatar-")
         val raw = folder.resolve("vfr.rgba"); val video = folder.resolve("vfr.webm")
+        val encodedVideo = folder.resolve("vfr-encoded.webm")
         val disk = ProfileStickerAvatarDiskBudget(); val pixels = ProfileStickerAvatarPixelBudget()
         val encodedBudget = ProfileStickerAvatarEncodedBudget(); val permit = ArtworkWorkerPermit {}
         try {
@@ -143,8 +144,20 @@ class ProfileStickerAvatarCodecSmokeTest {
                 "-map", "0:v:0", "-map", "1:a:0",
                 "-vf", "setpts=if(eq(N\\,0)\\,0\\,if(eq(N\\,1)\\,0.1\\,0.4))/TB", "-fps_mode", "passthrough",
                 "-sn", "-dn", "-c:v", "libvpx-vp9", "-threads", "1", "-lossless", "1", "-lag-in-frames", "0",
-                "-auto-alt-ref", "0", "-pix_fmt", "yuva420p", "-c:a", "libopus", "-t", "2", "-y", video.toString()))
+                "-auto-alt-ref", "0", "-pix_fmt", "yuva420p", "-c:a", "libopus", "-t", "2", "-y", encodedVideo.toString()))
+            // FFmpeg 7.1's passthrough encoder omits packet durations and WebM's
+            // DefaultDuration. Remux with this fixture's known 100ms default interval;
+            // stream copy preserves the three VFR timestamps and the longer audio tail.
+            MediaTools.capture(binary, listOf("-nostdin", "-hide_banner", "-loglevel", "error",
+                "-i", encodedVideo.toString(), "-map", "0", "-c", "copy", "-r:v", "10", "-y", video.toString()))
             val probe = binary.resolveSibling(if (binary.fileName.toString().endsWith(".exe", true)) "ffprobe.exe" else "ffprobe")
+            val framePositions = MediaTools.capture(probe, listOf("-v", "error", "-select_streams", "v:0",
+                "-show_frames", "-show_entries", "frame=best_effort_timestamp_time", "-of", "csv=p=0",
+                video.toString())).lineSequence().mapNotNull { it.substringBefore(',').trim().toDoubleOrNull() }.toList()
+            assertEquals(3, framePositions.size, "Remuxing must preserve exactly three native VFR frames.")
+            for ((index, expected) in listOf(0.0, 0.1, 0.4).withIndex())
+                assertEquals(expected, framePositions[index] - framePositions.first(), 0.000001,
+                    "Writing DefaultDuration must not resample the actual frame timestamps.")
             val containerDuration = MediaTools.capture(probe, listOf("-v", "error", "-show_entries", "format=duration",
                 "-of", "default=noprint_wrappers=1:nokey=1", video.toString())).trim().toDouble()
             assertTrue(containerDuration > 1.5, "Synthetic audio makes the container materially longer than video")
@@ -163,7 +176,7 @@ class ProfileStickerAvatarCodecSmokeTest {
             await { disk.used() == 0L && encodedBudget.used() == 0L }
             assertEquals(0L, pixels.used())
         } finally {
-            permit.release(); Files.deleteIfExists(raw); Files.deleteIfExists(video); Files.deleteIfExists(folder)
+            permit.release(); Files.deleteIfExists(raw); Files.deleteIfExists(video); Files.deleteIfExists(encodedVideo); Files.deleteIfExists(folder)
         }
     }
 

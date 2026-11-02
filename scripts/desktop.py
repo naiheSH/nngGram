@@ -40,6 +40,14 @@ def check():
     gradle(':desktopApp:assemble', ':desktopApp:test', ':shared:jvmTest', '-PnativeSmoke', '-PmediaSmoke')
 
 
+def regression_check():
+    # Run the prior cross-platform failures first; the following full check still
+    # executes every test. A regression is visible before a long UI suite finishes.
+    gradle(':shared:jvmTest', '-PmediaSmoke', '--tests', '*ConversationJumpHighlightRegressionRenderTest',
+           '--tests', '*ComposePixelSceneClockTest', '--tests', '*ProfileStickerAvatarCodecSmokeTest',
+           '--tests', '*ProfileStickerAvatarArtworkOwnershipTest')
+
+
 def executable(app, profile):
     if profile.startswith('macos-'):
         return app / 'Contents/MacOS/nngGram'
@@ -131,7 +139,7 @@ def build(args):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=['check', 'build'])
+    parser.add_argument('command', choices=['check', 'regression-check', 'build'])
     parser.add_argument('--full-tests', action='store_true', help='Compatibility flag: the full regression suite is now the default')
     parser.add_argument('--skip-tests', action='store_true')
     parser.add_argument('--release', action='store_true', help='Require builder-owned Telegram identity')
@@ -139,6 +147,8 @@ def main():
     args = parser.parse_args()
     if args.command == 'check':
         check()
+    elif args.command == 'regression-check':
+        regression_check()
     else:
         build(args)
 

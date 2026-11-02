@@ -20,12 +20,18 @@ import javax.swing.SwingUtilities
 import org.jetbrains.skia.Bitmap
 
 /** CPU-raster UI tests with real pointer input and a deterministic animation clock. */
-@OptIn(ExperimentalComposeUiApi::class, androidx.compose.ui.InternalComposeUiApi::class)
+@OptIn(ExperimentalComposeUiApi::class, androidx.compose.ui.InternalComposeUiApi::class,
+    kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 internal class ComposePixelScene(
     width: Int,
     height: Int,
+    virtualTime: Boolean = false,
     content: @Composable () -> Unit,
 ) : AutoCloseable {
+    // Pure UI effects may share the rendered clock; decoder/IO polling keeps real time.
+    private val scheduler = if (virtualTime) kotlinx.coroutines.test.TestCoroutineScheduler() else null
+    private val effectDispatcher = scheduler?.let { kotlinx.coroutines.test.StandardTestDispatcher(it) }
+        ?: kotlinx.coroutines.Dispatchers.Unconfined
     private val asynchronousFailure = AtomicReference<Throwable?>()
     private val previousHandler = onEventThread {
         Thread.currentThread().uncaughtExceptionHandler.also {
@@ -35,7 +41,7 @@ internal class ComposePixelScene(
         }
     }
     private val scene = try {
-        onEventThread { ImageComposeScene(width, height) {
+        onEventThread { ImageComposeScene(width, height, coroutineContext = effectDispatcher) {
             // Synthetic wheel units are viewport twentieths on every host. Native
             // Cocoa/WinUI/GNOME wheel acceleration belongs to platform integration tests.
             androidx.compose.runtime.CompositionLocalProvider(
@@ -135,12 +141,19 @@ internal class ComposePixelScene(
         repeat(frameCount - 1) {
             onEventThread {
                 checkAsynchronousFailure()
+                scheduler?.runCurrent()
+                scheduler?.advanceTimeBy(stepMillis)
+                scheduler?.runCurrent()
                 timeNanos += stepMillis * 1_000_000L
                 scene.render(timeNanos).close()
+                scheduler?.runCurrent()
             }
         }
         return onEventThread {
             checkAsynchronousFailure()
+            scheduler?.runCurrent()
+            scheduler?.advanceTimeBy(stepMillis)
+            scheduler?.runCurrent()
             timeNanos += stepMillis * 1_000_000L
             scene.render(timeNanos).use { image ->
                 Bitmap.makeFromImage(image).use { pixels ->
@@ -168,7 +181,7 @@ internal class ComposePixelScene(
 
     override fun close() {
         try {
-            onEventThread { scene.close() }
+            onEventThread { scene.close(); scheduler?.runCurrent() }
         } finally {
             onEventThread { Thread.currentThread().uncaughtExceptionHandler = previousHandler }
         }

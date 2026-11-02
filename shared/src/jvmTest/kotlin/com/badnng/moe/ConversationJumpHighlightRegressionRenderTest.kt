@@ -320,7 +320,7 @@ class ConversationJumpHighlightRegressionRenderTest {
         }
 
         fun scene(mode: ColorSchemeMode, density: Float, pageInteractive: () -> Boolean = { true },
-            outgoingWindow: Boolean = false) = ComposePixelScene((680 * density).roundToInt(), (620 * density).roundToInt()) {
+            outgoingWindow: Boolean = false) = ComposePixelScene((680 * density).roundToInt(), (620 * density).roundToInt(), virtualTime = true) {
             val theme = remember { ThemeController(mode) }
             val motion = remember(outgoingWindow) { if (outgoingWindow) HistoryWindowMotion(true) { 0f } else null }
             CompositionLocalProvider(LocalDensity provides Density(density),

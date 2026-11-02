@@ -157,11 +157,10 @@ class ConfigurationStore(
 
     companion object {
         fun default(): ConfigurationStore {
-            val root = System.getenv("LOCALAPPDATA")?.let(Path::of)
-                ?: Path.of(System.getProperty("user.home"), ".local", "share")
+            val root = com.badnng.moe.platform.DesktopPaths.applicationRoot()
             val config = System.getProperty("nnggram.config") ?: System.getenv("NNGGRAM_CONFIG")
-            val defaultPath = root.resolve("nngGram/tdlib.properties")
-            val data = root.resolve("nngGram/data")
+            val defaultPath = root.resolve("tdlib.properties")
+            val data = root.resolve("data")
             return try {
                 ConfigurationStore(config?.let(Path::of) ?: defaultPath, data,
                     bundledApiId = BundledTelegramApi.ID, bundledApiHash = BundledTelegramApi.HASH)

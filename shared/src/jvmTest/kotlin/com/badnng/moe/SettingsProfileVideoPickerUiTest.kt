@@ -220,7 +220,9 @@ class SettingsProfileVideoPickerUiTest {
     }
 
     @Test fun playbackRequiresExplicitClickAndStopsWhenPreviewIsOffscreenUnfocusedOrClosed() {
-        val f = Fixture()
+        // Leave enough scroll travel to move the whole preview out of view,
+        // including hosts whose text fallback metrics differ from Windows.
+        val f = Fixture(height = 600)
         f.scene().use { scene ->
             scene.settledFrame(); scene.await { f.ready() != null }
             assertTrue(f.preview.playing.isEmpty())
@@ -547,16 +549,21 @@ class SettingsProfileVideoPickerUiTest {
             listOfNotNull(f.probe?.previewBounds?.takeIf { it.width > 0 && it.height > 0 })
         else measured
     }
-    private fun ComposePixelScene.revealEditor(index: Int, f: Fixture): Rect = revealDescription("视频头像" +
-        listOf("片段起点（秒）", "片段终点（秒）", "封面位置（秒）")[index], f)
+    private fun ComposePixelScene.revealEditor(index: Int, f: Fixture): Rect = reveal(f) {
+        val label = "视频头像" + listOf("片段起点（秒）", "片段终点（秒）", "封面位置（秒）")[index]
+        unmergedSemanticsBounds { label in it.getOrNull(SemanticsProperties.ContentDescription).orEmpty() }
+            .filter { it.height >= 48f * f.density }
+    }
     private fun ComposePixelScene.replaceEditor(index: Int, value: String, f: Fixture) {
         val field = revealEditor(index, f)
         val editable = assertNotNull(unmergedSemanticsBounds { it.getOrNull(SemanticsProperties.EditableText) != null }
             .filter { it.overlaps(field) }.maxByOrNull { it.intersect(field).width * it.intersect(field).height }, "Actual editable text hit region")
         click(editable.intersect(field))
-        assertTrue(unmergedSemanticsBounds { it.getOrNull(SemanticsProperties.EditableText) != null &&
-            it.getOrNull(SemanticsProperties.Focused) == true }.any { it.overlaps(field) }, "Pointer click must focus the actual editor")
-        keyStroke(KeyEvent.VK_A, control = true); settledFrame(2, 16)
+        settledFrame(2, 16)
+        val focused = unmergedSemanticsBounds { it.getOrNull(SemanticsProperties.EditableText) != null &&
+            it.getOrNull(SemanticsProperties.Focused) == true }
+        assertTrue(focused.any { it.overlaps(field) }, "Pointer click must focus the actual editor: field=$field editable=$editable focused=$focused")
+        selectAll(); settledFrame(2, 16)
         keyStroke(KeyEvent.VK_BACK_SPACE); settledFrame(2, 16)
         value.forEach { character -> keyStroke(KeyEvent.getExtendedKeyCodeForChar(character.code), character); settledFrame(1, 16) }
         settledFrame()
@@ -603,7 +610,7 @@ class SettingsProfileVideoPickerUiTest {
             if (previousDirection != 0 && direction != previousDirection) step = (step / 2).coerceAtLeast(.01f)
             previousDirection = direction
             val scrollRegion = body?.takeIf { it.width > 0 && it.height > 0 } ?: scroller ?: window
-            scrollAt(scrollRegion.center.x, scrollRegion.center.y,
+            scrollAt(scrollRegion.right - 2f, scrollRegion.top + 2f,
                 deltaY = direction * step); settledFrame(5, 32)
         }
         return assertNotNull(visible(), "Pointer scroll must reveal target in actual dialog viewport ${viewport()} at ${f.width}x${f.height}: ${candidates()}")
@@ -630,7 +637,7 @@ class SettingsProfileVideoPickerUiTest {
                 settledFrame(2, 16)
                 return
             }
-            scrollAt(body.center.x, body.center.y, deltaY = 8f * f.density)
+            scrollAt(body.right - 2f, body.top + 2f, deltaY = 8f * f.density)
             settledFrame(5, 32)
         }
         assertFalse(assertNotNull(f.probe).previewBounds.overlaps(assertNotNull(f.probe).contentViewport),

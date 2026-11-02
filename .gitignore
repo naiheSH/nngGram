@@ -5,6 +5,7 @@
 xcuserdata
 !src/**/build/
 local.properties
+gradle-local.properties
 .idea
 .DS_Store
 captures
@@ -18,6 +19,8 @@ captures
 **/xcshareddata/WorkspaceSettings.xcsettings
 node_modules/
 native/windows-x64/
+native/macos-*/
+native/linux-*/
 *.session
 tdlib-local.properties
 telegram-api.local.properties

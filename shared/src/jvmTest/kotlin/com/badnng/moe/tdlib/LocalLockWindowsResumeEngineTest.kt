@@ -197,7 +197,7 @@ class LocalLockWindowsResumeEngineTest {
         val source = SyntheticIdleSource(inputFails)
         val timer = SyntheticDeadlines()
         val abi = FakeAbi(registrationFails)
-        private val host = LocalLockWindowsResumeHost(abi, supported = true)
+        private val host = com.badnng.moe.security.syntheticWindowsResumeHost(abi, supported = true)
         val resumeTasks = ConcurrentLinkedQueue<Runnable>()
         val engine = TdEngine(ConfigurationStore(configPath, root.resolve("data")), transport, engineDispatcher)
 

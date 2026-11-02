@@ -44,7 +44,7 @@ internal interface VideoAudioOutput : AutoCloseable {
 internal class InlineVideoPlayer(
     private val path: String,
     autoPlay: Boolean = true,
-    private val audioFactory: () -> VideoAudioOutput = { WinMmAudioOutput() },
+    private val audioFactory: () -> VideoAudioOutput = DesktopAudio::output,
     private val progressiveSource: ProgressiveVideoSource? = null,
     initialVolume: Float = 1f,
     /** GIF/animation playback never creates an audio decoder or opens an output device. */

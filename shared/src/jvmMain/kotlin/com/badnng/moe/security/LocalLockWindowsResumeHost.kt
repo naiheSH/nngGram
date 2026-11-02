@@ -22,9 +22,10 @@ internal fun interface LocalLockWindowsResumeCallback : StdCallCallback {
 internal class LocalLockWindowsResumeParameters(
     val callback: LocalLockWindowsResumeCallback,
     val context: Pointer,
+    callbackAddress: (LocalLockWindowsResumeCallback) -> Pointer = CallbackReference::getFunctionPointer,
 ) {
     val pointer = Memory(2L * Native.POINTER_SIZE).apply {
-        setPointer(0, CallbackReference.getFunctionPointer(callback))
+        setPointer(0, callbackAddress(callback))
         setPointer(Native.POINTER_SIZE.toLong(), context)
     }
 }
@@ -85,6 +86,7 @@ internal class LocalLockWindowsResumeLease internal constructor(
 internal class LocalLockWindowsResumeHost(
     private val access: WindowsLocalLockResumeAccess,
     private val supported: Boolean,
+    private val callbackAddress: (LocalLockWindowsResumeCallback) -> Pointer = CallbackReference::getFunctionPointer,
 ) : AutoCloseable {
     private val guard = Any()
     private var attempted = false
@@ -110,7 +112,7 @@ internal class LocalLockWindowsResumeHost(
         0
     }
     // Lazy for unsupported platforms. The production singleton retains this object too.
-    private val parameters by lazy { LocalLockWindowsResumeParameters(callback, context) }
+    private val parameters by lazy { LocalLockWindowsResumeParameters(callback, context, callbackAddress) }
 
     fun acquire(post: (LocalLockWindowsResumeSignal) -> Unit): LocalLockWindowsResumeLease {
         val lease: LocalLockWindowsResumeLease

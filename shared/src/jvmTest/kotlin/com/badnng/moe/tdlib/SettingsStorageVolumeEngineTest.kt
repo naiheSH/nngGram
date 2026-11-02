@@ -36,10 +36,11 @@ class SettingsStorageVolumeEngineTest {
             f.current.auth(AuthorizationPhase.WAITING_PARAMETERS); runCurrent()
             assertEquals(expected, f.current.parameters!!.files)
             f.current.auth(AuthorizationPhase.READY); runCurrent()
-            val handle = assertNotNull(engine.openSettingsStorageOwned { true }); runCurrent()
+            assertNull(engine.openSettingsStorageOwned { true }); runCurrent()
             assertEquals(SettingsStorageVolume.Unavailable, engine.state.value.storageSettings.volume)
             assertTrue(worker.tasks.isEmpty(), "A submitted but unaccepted parameter is not a volume source.")
             f.current.acceptParameters!!(null); runCurrent()
+            val handle = assertNotNull(engine.openSettingsStorageOwned { true }); runCurrent()
             assertEquals(SettingsStorageVolume.Loading, engine.state.value.storageSettings.volume)
             assertEquals(1, worker.tasks.size)
             worker.runNext(); runCurrent()
@@ -149,16 +150,15 @@ class SettingsStorageVolumeEngineTest {
             f.current.auth(AuthorizationPhase.WAITING_PARAMETERS); runCurrent()
             f.current.auth(AuthorizationPhase.READY); runCurrent()
             val status = mutableListOf<SettingsStorageToken?>()
-            val handle = assertNotNull(engine.openSettingsStorageOwnedObserved({ true }, status::add))
+            assertNull(engine.openSettingsStorageOwnedObserved({ true }, status::add))
             runCurrent()
-            assertNotNull(status.single())
+            assertTrue(status.isEmpty(), "No page owner is admitted before the local startup key is accepted")
             assertEquals(SettingsStorageVolume.Unavailable, engine.state.value.storageSettings.volume)
             f.current.acceptParameters!!(400)
             runCurrent()
             assertTrue(worker.tasks.isEmpty())
             assertTrue(queried.isEmpty())
-            assertEquals(null, status.last())
-            handle.close()
+            assertTrue(status.isEmpty())
         }
     }
 
@@ -381,7 +381,7 @@ class SettingsStorageVolumeEngineTest {
         if (selectAttempt) f.selectAttempt()
         val worker = ManualExecutor()
         val queried = mutableListOf<Path>()
-        val engine = TdEngine(f.store, f, StandardTestDispatcher(testScheduler), saveTargetRegistry = NativeSaveTargetRegistry())
+        val engine = syntheticOpenEngine(f.store, f, StandardTestDispatcher(testScheduler), saveTargetRegistry = NativeSaveTargetRegistry())
         engine.settingsStorageStatusDispatcher = StandardTestDispatcher(testScheduler)
         engine.settingsStorageVolumeCoordinator = SettingsStorageVolumeCoordinator(SettingsStorageVolumeAccess {
             queried.add(it)
@@ -427,7 +427,7 @@ class SettingsStorageVolumeEngineTest {
         ): TdSession = Session(onAuthorization).also { sessions += it }
     }
 
-    private class Session(private val authorization: (AuthorizationDetails) -> Unit) : TdSession {
+    private class Session(private val authorization: (AuthorizationDetails) -> Unit) : SyntheticOpenKeySession {
         private val ready = AtomicBoolean()
         val gate = TdUserInteractionGate()
         override val interactionGate = gate

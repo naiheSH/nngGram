@@ -366,7 +366,7 @@ internal class SkiaProfileStickerAvatarCodec(
                 Files.newOutputStream(scratch.frames, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE).use { sink ->
                     val command = listOf(executable.toString(), "-nostdin", "-hide_banner", "-loglevel", "error",
                         "-protocol_whitelist", "file,pipe", "-threads", "1", "-c:v", "libvpx-vp9", "-i", scratch.input.toString(),
-                        "-an", "-sn", "-dn", "-map", "0:v:0", "-vsync", "0", "-pix_fmt", "rgba",
+                        "-an", "-sn", "-dn", "-map", "0:v:0", "-fps_mode", "passthrough", "-pix_fmt", "rgba",
                         "-threads", "1", "-frames:v", maxFrames.toString(), "-f", "rawvideo", "pipe:1")
                     transferred = true
                     processes.run(command, scratch, permit, frameBytes * maxFrames, active, sink, childMemory)

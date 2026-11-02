@@ -252,7 +252,7 @@ class TdEngine(
         val onDue: (LocalLockIdleDue) -> Unit = { postAction(Action.LocalIdleDue(it)); Unit }
         val onAvailability: () -> Unit = { postAction(Action.LocalIdleAvailability); Unit }
         localLockIdleFactory?.invoke(onDue, onAvailability)
-            ?: LocalLockIdleController(WindowsLocalLockIdleSource(), localIdleScheduler, onDue, onAvailability)
+            ?: LocalLockIdleController(desktopLocalLockIdleSource(), localIdleScheduler, onDue, onAvailability)
     }
     /** Tests install a fake before start; synthetic transports never register the system host by default. */
     internal var localLockResumeHostFactory: (() -> LocalLockWindowsResumeHost)? = null
@@ -2620,7 +2620,7 @@ class TdEngine(
             val soundFiles = session?.notificationSoundFiles
             val sounds = if (catalog != null && soundFiles != null) OfficialNotificationSoundSource(catalog, soundFiles, scope) else null
             notificationSoundSource = sounds
-            val preview = sounds?.let { NotificationSoundPreviewPlayer(it, WindowsNotificationSignals({ 0L })) }
+            val preview = sounds?.let { NotificationSoundPreviewPlayer(it, desktopNotificationSignals { 0L }) }
             settingsController = SettingsController(current, settingsSession,
                 enqueue = { postAction(Action.SettingsWork(current, it)) },
                 publish = { settings ->
@@ -2653,7 +2653,7 @@ class TdEngine(
             val notificationOwner = session
             deviceNotificationsController = DeviceNotificationsController(current, notifications,
                 deviceNotificationPreferences,
-                WindowsNotificationSignals(notificationWindowHandle),
+                desktopNotificationSignals(notificationWindowHandle),
                 post = { postAction(Action.SettingsWork(current, it)) },
                 publish = { mutableState.value = mutableState.value.copy(deviceNotifications = it) },
                 navigate = { chatId, messageId ->

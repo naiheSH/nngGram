@@ -38,6 +38,9 @@ val generateTelegramApi by tasks.registering {
     }
 }
 
+val desktopNativeProfile: String by rootProject.extra
+val hostTdlibBundle = "native/$desktopNativeProfile/tdlib.jar"
+
 kotlin {
     jvm()
 
@@ -63,7 +66,7 @@ kotlin {
             implementation(libs.filekit.dialogs)
             implementation(libs.jna)
             implementation(libs.bouncycastle.bcprov)
-            implementation(files(rootProject.file("native/windows-x64/tdlib.jar")))
+            implementation(files(rootProject.file(hostTdlibBundle)))
             implementation(libs.kotlinx.coroutinesCore)
         }
         jvmTest.dependencies {
@@ -81,16 +84,44 @@ tasks.named<ProcessResources>("jvmProcessResources") {
 }
 
 val verifyTdlibBindings by tasks.registering {
-    val binding = rootProject.layout.projectDirectory.file("native/windows-x64/tdlib.jar")
+    val binding = rootProject.layout.projectDirectory.file(hostTdlibBundle)
+    val windows = System.getProperty("os.name").startsWith("Windows")
     doLast {
-        check(binding.asFile.isFile) { "Missing official TDLib Java binding. Run scripts/build-tdlib.ps1 with a JDK 21 x64 path first." }
+        check(binding.asFile.isFile) {
+            "Missing $hostTdlibBundle. Run scripts/build-tdlib.${if (windows) "ps1" else "sh"} with JDK 21 first."
+        }
     }
 }
 tasks.named("compileKotlinJvm") { dependsOn(verifyTdlibBindings) }
 
+val hostTdlibMetadata = layout.buildDirectory.dir("generated/hostTdlibMetadata")
+val generateHostTdlibMetadata by tasks.registering(Exec::class) {
+    dependsOn(verifyTdlibBindings)
+    inputs.file(rootProject.file(hostTdlibBundle))
+    inputs.file(rootProject.file("native/tdlib-source.properties"))
+    inputs.file(rootProject.file("scripts/GenerateTdlibNativeMetadata.java"))
+    outputs.dir(hostTdlibMetadata)
+    commandLine(
+        File(System.getProperty("java.home"), "bin/java").absolutePath,
+        rootProject.file("scripts/GenerateTdlibNativeMetadata.java").absolutePath,
+        rootProject.projectDir.absolutePath,
+        "--binding=$hostTdlibBundle", "--output=${hostTdlibMetadata.get().asFile.absolutePath}",
+    )
+}
+val originalTdlibResources = file("src/jvmMain/resources").toPath()
+tasks.named<ProcessResources>("jvmProcessResources") {
+    dependsOn(generateHostTdlibMetadata)
+    from(hostTdlibMetadata)
+    eachFile {
+        if ((path == "tdlib-native-image.properties" || path.startsWith("META-INF/native-image/com.badnng.moe/tdlib/")) &&
+            file.toPath().startsWith(originalTdlibResources)) exclude()
+    }
+}
+
 val verifyTdlibNativeMetadata by tasks.registering(Exec::class) {
     dependsOn(verifyTdlibBindings)
-    inputs.file(rootProject.file("native/windows-x64/tdlib.jar"))
+    val binding = rootProject.layout.projectDirectory.file(hostTdlibBundle)
+    onlyIf { binding.asFile.isFile && System.getProperty("os.name").startsWith("Windows") }
     inputs.file(rootProject.file("native/tdlib-source.properties"))
     inputs.file(rootProject.file("scripts/GenerateTdlibNativeMetadata.java"))
     inputs.dir("src/jvmMain/resources/META-INF/native-image/com.badnng.moe/tdlib")
@@ -98,7 +129,7 @@ val verifyTdlibNativeMetadata by tasks.registering(Exec::class) {
     val checkerTmp = layout.buildDirectory.dir("metadata-check-tmp")
     doFirst { checkerTmp.get().asFile.mkdirs() }
     commandLine(
-        File(System.getProperty("java.home"), "bin/java.exe").absolutePath,
+        File(System.getProperty("java.home"), "bin/java").absolutePath,
         "-Djava.io.tmpdir=${checkerTmp.get().asFile.absolutePath}",
         rootProject.file("scripts/GenerateTdlibNativeMetadata.java").absolutePath,
         rootProject.projectDir.absolutePath,
@@ -108,12 +139,16 @@ val verifyTdlibNativeMetadata by tasks.registering(Exec::class) {
 tasks.named("jvmProcessResources") { dependsOn(verifyTdlibNativeMetadata) }
 
 tasks.withType<Test>().configureEach {
+    // Separate JVMs isolate UI globals while keeping the full suite practical on CI.
+    maxParallelForks = providers.gradleProperty("testForks").orNull?.toIntOrNull()?.coerceIn(1, 4) ?: 2
     val temporaryDirectory = layout.buildDirectory.dir("test-tmp")
     doFirst { temporaryDirectory.get().asFile.mkdirs() }
     systemProperty("java.io.tmpdir", temporaryDirectory.get().asFile.absolutePath)
     if (!providers.gradleProperty("nativeSmoke").isPresent) exclude("**/NativeSmokeTest*")
     if (providers.gradleProperty("mediaSmoke").isPresent) {
-        systemProperty("nnggram.ffmpeg.path", rootProject.file("native/windows-x64/media/ffmpeg.exe").absolutePath)
+        val folder = hostTdlibBundle.removeSuffix("/tdlib.jar")
+        val tool = if (System.getProperty("os.name").startsWith("Windows")) "ffmpeg.exe" else "ffmpeg"
+        systemProperty("nnggram.ffmpeg.path", rootProject.file("$folder/media/$tool").absolutePath)
     } else {
         exclude("**/MediaDecoderSmokeTest*")
         exclude("**/InlineVideoPlayerSmokeTest*")

@@ -1,5 +1,9 @@
 name: Prepare pinned native dependencies
-description: Build the pinned official TDLib Java/JNI binding using the UCRT64 toolchain.
+description: Prepare the current host's pinned TDLib bundle and media tools.
+inputs:
+  runner-image:
+    description: Runner image label, included in the native cache key.
+    default: default
 runs:
   using: composite
   steps:
@@ -8,7 +12,31 @@ runs:
       with:
         distribution: zulu
         java-version: '21'
+    - name: Install macOS build and media tools
+      if: runner.os == 'macOS'
+      shell: bash
+      env:
+        HOMEBREW_NO_AUTO_UPDATE: '1'
+      run: brew install cmake ninja gperf openssl ffmpeg
+    - name: Install Linux build, media and display tools
+      if: runner.os == 'Linux'
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake ninja-build g++ gperf libssl-dev zlib1g-dev ffmpeg xvfb xauth libasound2t64 libgl1 libfontconfig1 fonts-noto-cjk fonts-noto-color-emoji
+    - name: Restore host-specific TDLib and media bundle
+      id: native-cache
+      uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+      with:
+        path: |
+          native/windows-x64
+          native/macos-x64
+          native/macos-arm64
+          native/linux-x64
+          native/linux-arm64
+        key: desktop-native-v2-${{ runner.os }}-${{ runner.arch }}-${{ inputs.runner-image }}-${{ hashFiles('native/tdlib-source.properties', 'scripts/build-tdlib.*', 'scripts/GenerateTdlibNativeMetadata.java', 'scripts/bundle-macos-libraries.py', 'scripts/prepare-media*', '.github/scripts/prepare-media-ci.ps1') }}
     - name: Install MSYS2 UCRT64 build tools
+      if: runner.os == 'Windows' && steps.native-cache.outputs.cache-hit != 'true'
       id: msys
       uses: msys2/setup-msys2@ec48f7c5447b3140e2b088413ae3a55687bccb6e # v2
       with:
@@ -20,5 +48,33 @@ runs:
           mingw-w64-ucrt-x86_64-cmake mingw-w64-ucrt-x86_64-ninja
           mingw-w64-ucrt-x86_64-openssl mingw-w64-ucrt-x86_64-zlib
     - name: Build pinned TDLib bundle and generated binding metadata
+      if: runner.os == 'Windows' && steps.native-cache.outputs.cache-hit != 'true'
       shell: pwsh
       run: ./scripts/build-tdlib.ps1 -MsysRoot '${{ steps.msys.outputs.msys2-location }}' -Jdk $env:JAVA_HOME -Jobs 2
+    - name: Build macOS or Linux TDLib bundle
+      if: runner.os != 'Windows' && steps.native-cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: JOBS=2 sh scripts/build-tdlib.sh
+    - name: Prepare verified Windows media tools
+      if: runner.os == 'Windows' && steps.native-cache.outputs.cache-hit != 'true'
+      shell: pwsh
+      run: ./.github/scripts/prepare-media-ci.ps1
+    - name: Prepare relocatable macOS media tools
+      if: runner.os == 'macOS' && steps.native-cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: sh scripts/prepare-media-macos.sh
+    - name: Restore Windows source metadata contract from the exact binding
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: java scripts/GenerateTdlibNativeMetadata.java .
+    - name: Cache host bundle
+      if: steps.native-cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+      with:
+        path: |
+          native/windows-x64
+          native/macos-x64
+          native/macos-arm64
+          native/linux-x64
+          native/linux-arm64
+        key: ${{ steps.native-cache.outputs.cache-primary-key }}

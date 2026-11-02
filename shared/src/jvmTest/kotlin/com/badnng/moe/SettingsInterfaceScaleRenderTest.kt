@@ -159,13 +159,13 @@ class SettingsInterfaceScaleRenderTest {
             scene.settledFrame()
             scene.click(scene.text("设置"))
             scene.settledFrame()
-            assertTrue(scene.hasText("姓名"), "900dp must initially show actual profile content beside the categories.")
+            assertTrue(scene.hasText("简介"), "900dp must initially show actual profile content beside the categories.")
             assertEquals(50f, scene.description("返回聊天").width, .01f)
             scene.revealScaleControl(150f, 1_160f)
             scene.dragScaleToMiddle()
             assertEquals(88f, scene.description("返回聊天").width, .01f,
                 "The real 40dp App control must become 40 * 1.25 * 1.75 pixels, with no second multiplication.")
-            assertFalse(scene.hasText("姓名"), "Scaling must move the same window naturally below the 760dp breakpoint.")
+            assertFalse(scene.hasText("简介"), "Scaling must move the same window naturally below the 760dp breakpoint.")
             // The larger density shrinks the real logical viewport. Scroll the
             // now lower sidebar control into view before inspecting clipped text.
             scene.revealScaleControl(150f, 1_160f)
@@ -173,10 +173,10 @@ class SettingsInterfaceScaleRenderTest {
 
             SwingUtilities.invokeAndWait { width = 1_660 }
             scene.settledFrame()
-            assertFalse(scene.hasText("姓名"), "1660 / 2.1875 remains below 760dp.")
+            assertFalse(scene.hasText("简介"), "1660 / 2.1875 remains below 760dp.")
             SwingUtilities.invokeAndWait { width = 1_665 }
             scene.settledFrame()
-            assertTrue(scene.hasText("姓名"), "1665 / 2.1875 must reveal the right-hand content again.")
+            assertTrue(scene.hasText("简介"), "1665 / 2.1875 must reveal the right-hand content again.")
 
             scene.revealScaleControl(150f, 1_160f)
             scene.click(scene.text("默认界面缩放比例"))
@@ -184,7 +184,7 @@ class SettingsInterfaceScaleRenderTest {
             assertEquals(50f, scene.description("返回聊天").width, .01f)
             scene.revealScaleControl(150f, 1_160f)
             assertTrue(scene.hasText("系统缩放：125%"), "Restoring automatic must keep the real host reference: ${scene.systemScaleLabels()}")
-            assertTrue(scene.hasText("姓名"))
+            assertTrue(scene.hasText("简介"))
         }
     }
 

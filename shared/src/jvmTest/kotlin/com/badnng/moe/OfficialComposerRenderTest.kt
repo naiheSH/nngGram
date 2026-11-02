@@ -158,7 +158,7 @@ class OfficialComposerRenderTest {
 
             state = state.copy(editTarget = source.copy(kind = MessageKind.FILE))
             scene.settledFrame(12)
-            scene.keyStroke(KeyEvent.VK_A, control = true)
+            scene.selectAll()
             scene.settledFrame(1)
             scene.keyStroke(KeyEvent.VK_BACK_SPACE)
             scene.settledFrame(12)

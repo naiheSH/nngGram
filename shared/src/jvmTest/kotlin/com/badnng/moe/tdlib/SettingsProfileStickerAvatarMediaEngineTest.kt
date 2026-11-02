@@ -10,6 +10,9 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import java.nio.file.Files
@@ -76,7 +79,6 @@ class SettingsProfileStickerAvatarMediaEngineTest {
         runTest {
             for (mode in listOf("stop", "mandatory", "ready", "picker", "selection", "catalog")) {
                 withEngine { engine, f ->
-                    f.openingCase = mode
                     val (parent, picker, selection) = prepared(engine, f)
                     val environment = checkNotNull(engine.profileStickerAvatarMedia.value)
                     val ui = ControlledUi(); val workers = ProfileStickerAvatarArtworkWorkers()
@@ -380,7 +382,7 @@ class SettingsProfileStickerAvatarMediaEngineTest {
         }
     }
 
-    private fun TestScope.prepared(engine: TdEngine, f: Fixture): Triple<SettingsProfileExtrasToken,
+    private suspend fun TestScope.prepared(engine: TdEngine, f: Fixture): Triple<SettingsProfileExtrasToken,
         ProfileStickerAvatarPickerTicket, ProfileStickerAvatarSelectionTicket> {
         val parent = openExtras(engine, f)
         val picker = openPicker(engine, parent)
@@ -394,50 +396,36 @@ class SettingsProfileStickerAvatarMediaEngineTest {
         val f = Fixture()
         val engine = syntheticOpenEngine(f.store, f, StandardTestDispatcher(testScheduler))
         try {
-            assertTrue(engine.start()); runCurrent()
-            f.auth(AuthorizationPhase.WAITING_PARAMETERS); runCurrent()
-            f.auth(AuthorizationPhase.READY); runCurrent()
+            assertTrue(engine.start()); advanceUntilIdle()
+            f.auth(AuthorizationPhase.WAITING_PARAMETERS); advanceUntilIdle()
+            f.auth(AuthorizationPhase.READY); advanceUntilIdle()
             assertNull(engine.profileStickerAvatarMedia.value)
-            checkNotNull(f.chats.me).invoke(ChatResult(AccountProfile(43, "Synthetic self"))); runCurrent()
+            checkNotNull(f.chats.me).invoke(ChatResult(AccountProfile(43, "Synthetic self"))); advanceUntilIdle()
             assertNotNull(engine.profileStickerAvatarMedia.value)
-            assertTrue(engine.loadSettings(engine.state.value.settings.token, SettingsSection.PROFILE)); runCurrent()
+            assertTrue(engine.loadSettings(engine.state.value.settings.token, SettingsSection.PROFILE))
+            withTimeout(5_000) { engine.state.first { it.settings.profile?.userId == 43L } }
             assertEquals(43L, engine.state.value.settings.profile?.userId)
             block(engine, f)
         } finally {
             f.closeImmediately = true
             if (f.closeCalls > 0 && !f.closed) f.auth(AuthorizationPhase.CLOSED)
             val close = async { engine.close() }
-            runCurrent()
+            advanceUntilIdle()
             val closed = close.await()
             if (closed) f.delete()
             assertTrue(closed)
         }
     }
 
-    private fun TestScope.openExtras(engine: TdEngine, f: Fixture): SettingsProfileExtrasToken {
+    private suspend fun TestScope.openExtras(engine: TdEngine, f: Fixture): SettingsProfileExtrasToken {
         val parent = engine.state.value.settings.token
-        val leaseChecks = AtomicInteger()
-        val actorMarker = AtomicReference("not-reached")
-        val priorLoads = f.settings.profileExtras.loadCalls.get()
-        val priorCallbacks = f.settings.profileExtras.loadCallbacks.get()
-        assertTrue(engine.openSettingsProfileExtras(parent, 43) {
-            if (leaseChecks.incrementAndGet() > 1) {
-                val witness = f.gate.callbackWitness()
-                actorMarker.set("phase=${engine.localLockState.value.phase},ordinary=${f.gate.allowsOrdinary()}," +
-                    "callbackCurrent=${f.gate.callbackContextIsCurrent()},epoch=${witness?.epoch},blocked=${witness?.blocked}")
-            }
-            true
-        }); runCurrent()
+        assertTrue(engine.openSettingsProfileExtras(parent, 43))
+        // Await the actor publication, rather than assuming channel resumption has
+        // completed while the submitting test coroutine is still on its stack.
+        withTimeout(5_000) { engine.state.first { it.settings.profileExtras.token.userId == 43L &&
+            !it.settings.profileExtras.loading } }
         val page = engine.state.value.settings.profileExtras
-        val state = engine.state.value
-        assertEquals(43L, page.token.userId,
-            "Single opening case=${f.openingCase}; parentCurrent=${state.settings.token == parent}; " +
-                "leaseChecks=${leaseChecks.get()}; nativeLoads=${f.settings.profileExtras.loadCalls.get() - priorLoads}; " +
-                "nativeCallbacksReturned=${f.settings.profileExtras.loadCallbacks.get() - priorCallbacks}; actor=${actorMarker.get()}; " +
-                "profileMatches=${state.settings.profile?.userId == 43L}; settingsEnabled=${state.settings.enabled}; " +
-                "engine=${state.status.engine}; auth=${state.status.authorization}; nativeReady=${f.ready.get()}; " +
-                "ordinary=${f.gate.allowsOrdinary()}; callbackCurrent=${f.gate.callbackContextIsCurrent()}; " +
-                "localPhase=${state.localLock.phase}; localEpoch=${state.localLock.epoch}; localBlocked=${state.localLock.rootBlocked}")
+        assertEquals(43L, page.token.userId)
         assertEquals(91L, page.data?.photoId)
         assertFalse(page.loading)
         return page.token
@@ -532,7 +520,6 @@ class SettingsProfileStickerAvatarMediaEngineTest {
         val chats = FakeChats()
         val media = FakeMedia()
         val settings = FakeSettings(FakeExtras(native))
-        var openingCase = "ordinary"
         var closeImmediately = true
         var closeCalls = 0
         var closed = false

@@ -70,7 +70,8 @@ internal interface LocalProtectionPersistence {
  */
 internal class LocalProtectionRecordStore(
     private val root: LocalProtectionRoot,
-    private val backend: LocalLockCommitBackend = LocalLockWindowsCommit,
+    private val backend: LocalLockCommitBackend = if (System.getProperty("os.name").startsWith("Windows"))
+        LocalLockWindowsCommit else LocalLockPosixCommit,
 ) : LocalProtectionPersistence {
     private val record = root.path.resolve("local-protection.wrap")
     private val pending = root.path.resolve("local-protection.pending")

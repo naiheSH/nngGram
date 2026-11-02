@@ -21,6 +21,14 @@ class NativeSmokeTest {
         val engine = TdEngine(ConfigurationStore(configPath, data), OfficialTdTransport(offline = true))
         try {
             engine.start()
+            val setup = assertNotNull(withTimeoutOrNull(40_000) {
+                engine.localLockState.first {
+                    it.phase == com.badnng.moe.settings.LocalLockPhase.NEW_ROOT_SETUP ||
+                        it.phase == com.badnng.moe.settings.LocalLockPhase.RECOVERY
+                }
+            })
+            assertEquals(com.badnng.moe.settings.LocalLockPhase.NEW_ROOT_SETUP, setup.phase)
+            engine.localLockActions.skipSetup()
             val snapshot = assertNotNull(withTimeoutOrNull(40_000) {
                 engine.state.first {
                     (it.status.authorization == AuthorizationPhase.WAITING_LOGIN && it.status.engine == EnginePhase.INITIALIZED && it.proxy == ProxyStatus.DIRECT) ||

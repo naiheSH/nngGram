@@ -171,7 +171,7 @@ class AuthenticationLoginUiTest {
         moveTo(bounds.center.x, bounds.center.y); pressAt(bounds.center.x, bounds.center.y); releaseAt(bounds.center.x, bounds.center.y)
     }
     private fun ComposePixelScene.replace(bounds: Rect, value: String) {
-        click(bounds); settledFrame(2, 16); keyStroke(KeyEvent.VK_A, control = true); keyStroke(KeyEvent.VK_BACK_SPACE)
+        click(bounds); settledFrame(2, 16); selectAll(); keyStroke(KeyEvent.VK_BACK_SPACE)
         value.forEach { keyStroke(KeyEvent.getExtendedKeyCodeForChar(it.code), it); settledFrame(1, 16) }
         settledFrame(3, 16)
     }

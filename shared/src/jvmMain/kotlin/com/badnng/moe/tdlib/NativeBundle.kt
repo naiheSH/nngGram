@@ -4,7 +4,6 @@ import com.badnng.moe.status.NativeInfo
 import com.badnng.moe.status.FailureCategory
 import org.drinkless.tdlib.Client
 import org.drinkless.tdlib.TdApi
-import java.io.RandomAccessFile
 import java.io.IOException
 import java.nio.file.Files
 import java.nio.file.Path
@@ -21,21 +20,25 @@ internal class NativeBundleValidator(
 
     private fun validateFiles(directory: Path, bindingJar: Path): List<Path> {
         val manifest = directory.resolve("manifest.properties")
-        if (!Files.isRegularFile(manifest)) fail("缺少 TDLib 原生文件清单", "请重新构建或完整复制 native/windows-x64 目录。")
+        if (!Files.isRegularFile(manifest)) fail("缺少 TDLib 原生文件清单", "请重新构建或完整复制当前平台的 native 目录。")
         val properties = Properties().apply { Files.newBufferedReader(manifest).use(::load) }
-        if (properties.getProperty("source.commit") != expectedCommit || properties.getProperty("architecture") != "x64" || properties.getProperty("binding.loader.patch") != "absolute-path-v1") {
-            fail("TDLib 构建来源、架构或绑定不匹配", "请使用本项目脚本完整构建 Windows x64 原生包。")
+        val profile = HostPlatform.current.nativeProfile
+        if (properties.getProperty("source.commit") != expectedCommit ||
+            properties.getProperty("architecture") != profile.architecture ||
+            properties.getProperty("binding.loader.patch") != "absolute-path-v1") {
+            fail("TDLib 构建来源、架构或绑定不匹配", "请使用本项目脚本为当前平台完整构建原生包。")
         }
         if (embeddedBindingHash != null && (!embeddedBindingHash.matches(Regex("[a-f0-9]{64}")) ||
                 properties.getProperty("sha256.tdlib.jar") != embeddedBindingHash)) {
             fail("原生程序与 TDLib 绑定校验信息不匹配", "请重新生成 Native Image 元数据，并将同一原生包随应用一起分发。")
         }
         val names = properties.getProperty("load.order", "").split(',')
-        if (names.lastOrNull() != "tdjni.dll" || names.any { !it.matches(Regex("[a-zA-Z0-9._+-]+\\.dll")) } || names.distinct().size != names.size) {
-            fail("TDLib 文件清单无效", "请重新构建原生文件，勿混合不同构建的 DLL。")
+        val library = Regex(profile.libraryPattern)
+        if (names.lastOrNull() != profile.jniLibrary || names.any { !it.matches(library) } || names.distinct().size != names.size) {
+            fail("TDLib 文件清单无效", "请重新构建原生文件，勿混合不同构建的动态库。")
         }
         fun verifyHash(path: Path, name: String) {
-            if (!Files.isRegularFile(path)) fail("缺少原生依赖：$name", "请恢复完整的 native/windows-x64 目录。")
+            if (!Files.isRegularFile(path)) fail("缺少原生依赖：$name", "请恢复完整的 ${profile.bundleDirectoryName} 目录。")
             val expected = properties.getProperty("sha256.$name")
             val digest = MessageDigest.getInstance("SHA-256")
             Files.newInputStream(path).use { stream ->
@@ -47,32 +50,18 @@ internal class NativeBundleValidator(
                 }
             }
             val actual = digest.digest().joinToString("") { "%02x".format(it) }
-            if (actual != expected) fail("TDLib 文件校验失败：$name", "请重新构建，确保 Java 绑定与 DLL 来自同一次构建。")
+            if (actual != expected) fail("TDLib 文件校验失败：$name", "请重新构建，确保 Java 绑定与动态库来自同一次构建。")
         }
         verifyHash(bindingJar, "tdlib.jar")
         return names.map { name ->
             directory.resolve(name).also { file ->
-                if (!Files.isRegularFile(file)) fail("缺少原生依赖：$name", "请恢复完整的 native/windows-x64 目录。")
-                verifyPe(file)
+                if (!Files.isRegularFile(file)) fail("缺少原生依赖：$name", "请恢复完整的 ${profile.bundleDirectoryName} 目录。")
+                profile.verify(file)
                 verifyHash(file, name)
             }
         }
     }
 
-    private fun verifyPe(path: Path) {
-        RandomAccessFile(path.toFile(), "r").use { file ->
-            if (file.length() < 64 || file.readUnsignedShort() != 0x4d5a) invalidPe(path)
-            file.seek(0x3c)
-            val offset = Integer.reverseBytes(file.readInt()).toLong()
-            if (offset < 64 || offset > file.length() - 6) invalidPe(path)
-            file.seek(offset)
-            if (file.readInt() != 0x50450000) invalidPe(path)
-            val machine = java.lang.Short.reverseBytes(file.readShort()).toInt() and 0xffff
-            if (machine != 0x8664) fail("DLL 不是 Windows x64：${path.fileName}", "请替换为 x64 原生库，不能混用 x86 或 ARM64 文件。")
-        }
-    }
-
-    private fun invalidPe(path: Path): Nothing = fail("DLL 文件损坏：${path.fileName}", "请重新构建或恢复原生文件。")
     private fun fail(summary: String, recovery: String): Nothing = throw nativeFailure(summary, recovery)
 }
 
@@ -103,8 +92,10 @@ object NativeBundle {
         loaded?.let { return it }
         onStage(NativeBundleStage.PLATFORM)
         if (initializationFailed) throw nativeFailure("原生库加载曾失败", "修复原生依赖后请重启应用，重新加载绑定。")
-        if (!System.getProperty("os.name").startsWith("Windows") || System.getProperty("os.arch") !in setOf("amd64", "x86_64")) {
-            throw nativeFailure("当前平台不受支持", "请使用 Windows x64 原生程序或受支持的 64 位 JVM。")
+        val profile = try {
+            HostPlatform.current.nativeProfile
+        } catch (_: IllegalStateException) {
+            throw nativeFailure("当前平台不受支持", "请使用 Windows、macOS 或 Linux 的 x64/arm64 桌面程序，或受支持的 64 位 JVM。")
         }
         onStage(NativeBundleStage.SOURCE_METADATA)
         val expected = Properties().apply {
@@ -154,7 +145,7 @@ object NativeBundle {
         } catch (error: LinkageError) {
             initializationFailed = true
             onLinkageFailure(error)
-            throw nativeFailure("Windows 无法加载 TDLib 依赖", "请检查 DLL 依赖与 x64 JVM 是否完整，修复后重启应用（${error.javaClass.simpleName}）。")
+            throw nativeFailure("${HostPlatform.current.displayName} 无法加载 TDLib 依赖", "请检查动态库依赖与 64 位 JVM 是否完整，修复后重启应用（${error.javaClass.simpleName}）。")
         }
     }
 

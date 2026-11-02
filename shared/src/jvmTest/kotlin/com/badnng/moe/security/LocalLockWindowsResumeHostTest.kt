@@ -15,9 +15,16 @@ import kotlin.test.assertTrue
 /** Synthetic PowrProf boundary only: never registers Windows, sleeps the OS, or forces GC. */
 class LocalLockWindowsResumeHostTest {
     @Test
+    fun actualWindowsCallbackCanProduceItsNativeFunctionPointer() {
+        org.junit.Assume.assumeTrue("Actual Windows stdcall trampoline", com.sun.jna.Platform.isWindows())
+        val parameters = LocalLockWindowsResumeParameters(LocalLockWindowsResumeCallback { _, _, _ -> 0 }, Pointer(1L))
+        assertTrue(Pointer.nativeValue(parameters.pointer.getPointer(0)) != 0L)
+    }
+
+    @Test
     fun registrationUsesCallbackFlagTwoPointersAndDwordOutHandleContract() {
         val abi = FakeAbi()
-        val host = LocalLockWindowsResumeHost(abi, supported = true)
+        val host = com.badnng.moe.security.syntheticWindowsResumeHost(abi, supported = true)
         val lease = host.acquire { error("no notification expected") }
         assertEquals(LocalLockWindowsResumeAvailability.AVAILABLE, lease.availability)
         assertEquals(1, abi.registerCalls)
@@ -37,7 +44,7 @@ class LocalLockWindowsResumeHostTest {
     fun resumeSevenAndEighteenCoalesceAndEachSignalConsumesOnlyOnce() {
         val abi = FakeAbi()
         val queue = mutableListOf<LocalLockWindowsResumeSignal>()
-        val host = LocalLockWindowsResumeHost(abi, true)
+        val host = com.badnng.moe.security.syntheticWindowsResumeHost(abi, true)
         host.acquire(queue::add)
         assertEquals(0, abi.emit(7))
         repeat(40) { assertEquals(0, abi.emit(18)) }
@@ -54,7 +61,7 @@ class LocalLockWindowsResumeHostTest {
     fun suspendUnknownAndWrongContextCannotPublishAResume() {
         val abi = FakeAbi()
         val queue = mutableListOf<LocalLockWindowsResumeSignal>()
-        val host = LocalLockWindowsResumeHost(abi, true)
+        val host = com.badnng.moe.security.syntheticWindowsResumeHost(abi, true)
         host.acquire(queue::add)
         for (type in listOf(4, 6, 0, -1, Int.MAX_VALUE)) assertEquals(0, abi.emit(type))
         assertEquals(0, abi.emit(7, Pointer(99)))
@@ -68,7 +75,7 @@ class LocalLockWindowsResumeHostTest {
         val abi = FakeAbi()
         val oldQueue = mutableListOf<LocalLockWindowsResumeSignal>()
         val newQueue = mutableListOf<LocalLockWindowsResumeSignal>()
-        val host = LocalLockWindowsResumeHost(abi, true)
+        val host = com.badnng.moe.security.syntheticWindowsResumeHost(abi, true)
         val old = host.acquire(oldQueue::add)
         assertEquals(LocalLockWindowsResumeAvailability.IN_USE,
             host.acquire { error("rejected owner") }.availability)
@@ -90,7 +97,7 @@ class LocalLockWindowsResumeHostTest {
     @Test
     fun registerErrorNullSuccessAndLinkageFailureAreExplicitlyUnavailableWithoutRetry() {
         for (abi in listOf(FakeAbi(result = 5), FakeAbi(nullHandle = true), FakeAbi(linkageFailure = true))) {
-            val host = LocalLockWindowsResumeHost(abi, true)
+            val host = com.badnng.moe.security.syntheticWindowsResumeHost(abi, true)
             val queue = mutableListOf<LocalLockWindowsResumeSignal>()
             val lease = host.acquire(queue::add)
             assertEquals(LocalLockWindowsResumeAvailability.REGISTRATION_FAILED, lease.availability)
@@ -107,7 +114,7 @@ class LocalLockWindowsResumeHostTest {
     @Test
     fun unsupportedPlatformNeverCallsNativeBoundary() {
         val abi = FakeAbi()
-        val host = LocalLockWindowsResumeHost(abi, false)
+        val host = com.badnng.moe.security.syntheticWindowsResumeHost(abi, false)
         assertEquals(LocalLockWindowsResumeAvailability.UNSUPPORTED, host.acquire {}.availability)
         host.close()
         assertEquals(0, abi.registerCalls)
@@ -122,7 +129,7 @@ class LocalLockWindowsResumeHostTest {
             parameters.callback.invoke(parameters.context, 18, null)
             assertTrue(queue.isEmpty(), "Only successful registration can publish to the owner.")
         }
-        val host = LocalLockWindowsResumeHost(abi, true)
+        val host = com.badnng.moe.security.syntheticWindowsResumeHost(abi, true)
         val lease = host.acquire(queue::add)
         assertEquals(LocalLockWindowsResumeAvailability.AVAILABLE, lease.availability)
         assertTrue(queue.single().consume())
@@ -134,7 +141,7 @@ class LocalLockWindowsResumeHostTest {
         for (duringRegister in listOf(false, true)) {
             val abi = FakeAbi()
             if (duringRegister) abi.duringRegister = { it.callback.invoke(it.context, 7, null) }
-            val host = LocalLockWindowsResumeHost(abi, true)
+            val host = com.badnng.moe.security.syntheticWindowsResumeHost(abi, true)
             val lease = host.acquire { throw IllegalStateException("synthetic rejected owner queue") }
             if (!duringRegister) assertEquals(0, abi.emit(7))
             assertEquals(LocalLockWindowsResumeAvailability.DELIVERY_FAILED, lease.availability)
@@ -147,7 +154,7 @@ class LocalLockWindowsResumeHostTest {
     fun failedUnregisterRevokesSignalsAndKeepsCallbackStorageUsableForLateNativeCallers() {
         val abi = FakeAbi(unregisterResult = 87)
         val queue = mutableListOf<LocalLockWindowsResumeSignal>()
-        val host = LocalLockWindowsResumeHost(abi, true)
+        val host = com.badnng.moe.security.syntheticWindowsResumeHost(abi, true)
         val lease = host.acquire(queue::add)
         abi.emit(18)
         val retainedParameters = assertNotNull(abi.parameters)
@@ -167,7 +174,7 @@ class LocalLockWindowsResumeHostTest {
     @Test
     fun closeDoesNotWaitForInFlightPostAndLateSignalCannotAuthorizeReplacementLease() {
         val abi = FakeAbi()
-        val host = LocalLockWindowsResumeHost(abi, true)
+        val host = com.badnng.moe.security.syntheticWindowsResumeHost(abi, true)
         val entered = CountDownLatch(1)
         val continuePost = CountDownLatch(1)
         val late = AtomicReference<LocalLockWindowsResumeSignal>()
@@ -209,7 +216,7 @@ class LocalLockWindowsResumeHostTest {
             entered.countDown()
             check(continueRegister.await(5, TimeUnit.SECONDS))
         }
-        val host = LocalLockWindowsResumeHost(abi, true)
+        val host = com.badnng.moe.security.syntheticWindowsResumeHost(abi, true)
         val lease = AtomicReference<LocalLockWindowsResumeLease>()
         val failure = AtomicReference<Throwable>()
         val registerThread = Thread {
@@ -248,7 +255,7 @@ class LocalLockWindowsResumeHostTest {
             LocalLockDeadlineHandle {}
         }, due::add)
         val abi = FakeAbi()
-        val host = LocalLockWindowsResumeHost(abi, true)
+        val host = com.badnng.moe.security.syntheticWindowsResumeHost(abi, true)
         val queue = mutableListOf<LocalLockWindowsResumeSignal>()
         host.acquire(queue::add)
         idle.update(LocalLockIdleConfig(true, true, epoch = 9, timeoutSeconds = 60))

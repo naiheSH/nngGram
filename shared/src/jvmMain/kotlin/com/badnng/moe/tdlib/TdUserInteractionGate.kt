@@ -217,6 +217,9 @@ class TdUserInteractionGate {
     private fun protectedSend(send: (TdApi.Function<*>, (TdApi.Object) -> Unit, () -> Unit) -> Unit, ordinary: Boolean):
         (TdApi.Function<*>, (TdApi.Object) -> Unit, () -> Unit) -> Unit = { request, result, failed ->
         val cleanup = request is TdApi.CloseChat || request is TdApi.CancelDownloadFile
+        // Resource acquisition must settle its original owner even after admission expires;
+        // otherwise an accepted download/open can no longer be relinquished by that owner.
+        val resourceTerminal = ordinary && (request is TdApi.OpenChat || request is TdApi.DownloadFile)
         // These are already-submitted message mutations. Their real result must reconcile
         // the original request even if the local gate closes before the result arrives.
         val messageTerminal = ordinary && (request is TdApi.SendMessage || request is TdApi.ResendMessages ||
@@ -240,7 +243,7 @@ class TdUserInteractionGate {
         // Configured-account writes can traverse the login transport. Exact marked writes
         // still obey ordinary account policy; unmarked login/mandatory traffic keeps its policy.
         val ordinaryPolicy = ordinary || specialTerminal
-        val terminal = messageTerminal || settingsTerminal || folderTerminal || specialTerminal
+        val terminal = resourceTerminal || messageTerminal || settingsTerminal || folderTerminal || specialTerminal
         val witness = callbackWitness.get() ?: localWitness()
         val deferred = ArrayList<() -> Unit>()
         var submitting = true

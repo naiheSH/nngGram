@@ -200,7 +200,7 @@ class AppLocalLockOwnershipTest {
     private fun ComposePixelScene.replace(rect: Rect, value: String) {
         click(rect)
         settledFrame(2, 16)
-        keyStroke(KeyEvent.VK_A, control = true)
+        selectAll()
         keyStroke(KeyEvent.VK_BACK_SPACE)
         settledFrame(2, 16)
         for (character in value) {

@@ -44,13 +44,14 @@ class NativeSaveTargetEngineTest {
         withEngine { engine, f, registry ->
             f.throwCreate = true
             assertTrue(engine.start()); runCurrent()
-            assertFalse(engine.state.value.clientActive)
+            assertTrue(engine.state.value.clientActive, "A native create exception retains an unconfirmed client until Closed")
             assertEquals(SaveTargetIssue.UNKNOWN_NATIVE_ROOTS, registry.capture().check(f.root.resolve("outside")))
-            val closed = async(start = CoroutineStart.UNDISPATCHED) { engine.close() }
+            val closed = async(start = CoroutineStart.UNDISPATCHED) { engine.close(timeoutMillis = 0) }
             runCurrent()
-            assertTrue(closed.await())
+            assertFalse(closed.await(), "An indeterminate native create cannot be reported as a confirmed close")
             assertEquals(SaveTargetIssue.UNKNOWN_NATIVE_ROOTS, registry.capture().check(f.root.resolve("outside")),
                 "An exception after entering create is not evidence that a native client never existed.")
+            f.auth(AuthorizationPhase.CLOSED); runCurrent()
         }
     }
 
@@ -69,6 +70,7 @@ class NativeSaveTargetEngineTest {
             f.throwCreate = true
             assertTrue(engine.start()); runCurrent()
             val first = f.authorizationCallback()
+            f.auth(AuthorizationPhase.CLOSED); runCurrent()
             f.throwCreate = false
             assertTrue(engine.start()); runCurrent()
             assertEquals(SaveTargetIssue.UNKNOWN_NATIVE_ROOTS, registry.capture().check(f.root.resolve("outside")))
@@ -134,7 +136,7 @@ class NativeSaveTargetEngineTest {
     private suspend fun TestScope.withEngine(block: suspend TestScope.(TdEngine, Fixture, NativeSaveTargetRegistry) -> Unit) {
         val f = Fixture()
         val registry = NativeSaveTargetRegistry()
-        val engine = TdEngine(f.store, f, StandardTestDispatcher(testScheduler), saveTargetRegistry = registry)
+        val engine = syntheticOpenEngine(f.store, f, StandardTestDispatcher(testScheduler), saveTargetRegistry = registry)
         try { block(engine, f, registry) } finally {
             f.closeAutomatically = true
             val close = async(start = CoroutineStart.UNDISPATCHED) { engine.close() }
@@ -173,7 +175,7 @@ class NativeSaveTargetEngineTest {
             authorization = onAuthorization
             if (throwCreate) throw IllegalStateException("synthetic indeterminate create")
             created = true
-            return object : TdSession {
+            return object : SyntheticOpenKeySession {
                 override fun setParameters(config: TdConfiguration, directories: DataDirectoryLease, result: (Int?) -> Unit) {
                     parameters = directories; acceptParameters = result
                 }

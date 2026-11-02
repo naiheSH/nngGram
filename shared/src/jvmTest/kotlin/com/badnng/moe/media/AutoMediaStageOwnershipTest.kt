@@ -14,10 +14,10 @@ import kotlin.test.*
 class AutoMediaStageOwnershipTest {
     @Test fun refusalAfterPrepareRetainsOneIdentifiedStageAndSafeRetryReclaimsIt() = fixture { f ->
         var unknown: NativeSaveTargetRegistry.Registration? = null
-        val io = object : AutoMediaCopyIo by NioAutoMediaCopyIo {
+        val io = object : AutoMediaCopyIo by PortableAutoMediaCopyIo {
             override fun prepareOwnedCopy(source: Path, destination: Path, nativeSize: Long, slot: AutoMediaStageSlot?,
                 active: () -> Boolean): AutoMediaPreparedCopy {
-                val prepared = NioAutoMediaCopyIo.prepareOwnedCopy(source, destination, nativeSize, slot, active)
+                val prepared = PortableAutoMediaCopyIo.prepareOwnedCopy(source, destination, nativeSize, slot, active)
                 unknown = f.registry.registerUnknown(2)
                 return prepared
             }
@@ -29,11 +29,11 @@ class AutoMediaStageOwnershipTest {
         assertTrue(Files.size(oldStage) > 0)
         repeat(3) {
             assertEquals(AutoMediaCopyResult.Failed(AutoMediaCopyIssue.TARGET_UNKNOWN),
-                AutoMediaCopyJournal().copy(f.request, f.guard(), { true }, { true }))
+                AutoMediaCopyJournal(PortableAutoMediaCopyIo).copy(f.request, f.guard(), { true }, { true }))
             assertEquals(listOf(oldStage), f.stages())
         }
         unknown!!.confirmedClosed()
-        val saved = assertIs<AutoMediaCopyResult.Saved>(AutoMediaCopyJournal().copy(f.request, f.guard(), { true }, { true }))
+        val saved = assertIs<AutoMediaCopyResult.Saved>(AutoMediaCopyJournal(PortableAutoMediaCopyIo).copy(f.request, f.guard(), { true }, { true }))
         assertFalse(Files.exists(oldStage))
         assertEquals("source bytes", Files.readString(saved.path))
         assertEquals("source bytes", Files.readString(f.source))
@@ -43,7 +43,7 @@ class AutoMediaStageOwnershipTest {
 
     @Test fun suppliedStageJournalReadRefusalStaysBoundedAcrossDestinationChanges() = fixture { f ->
         var unknown: NativeSaveTargetRegistry.Registration? = null
-        val io = object : AutoMediaCopyIo by NioAutoMediaCopyIo {
+        val io = object : AutoMediaCopyIo by PortableAutoMediaCopyIo {
             override fun loadJournal(path: Path): AutoMediaCopyRecord? {
                 unknown = f.registry.registerUnknown(3)
                 return null
@@ -55,11 +55,11 @@ class AutoMediaStageOwnershipTest {
         val (stage, identity) = f.owned()
         assertEquals(stableMediaFileIdentity(stage), identity)
         val other = f.root.resolve("other-output")
-        repeat(3) { AutoMediaCopyJournal().copy(noRemote.copy(destination = other), f.guard(), { true }, { true }) }
+        repeat(3) { AutoMediaCopyJournal(PortableAutoMediaCopyIo).copy(noRemote.copy(destination = other), f.guard(), { true }, { true }) }
         assertEquals(listOf(stage), f.stages())
         assertFalse(Files.exists(other))
         unknown!!.confirmedClosed()
-        assertIs<AutoMediaCopyResult.Saved>(AutoMediaCopyJournal().copy(noRemote.copy(destination = other), f.guard(), { true }, { true }))
+        assertIs<AutoMediaCopyResult.Saved>(AutoMediaCopyJournal(PortableAutoMediaCopyIo).copy(noRemote.copy(destination = other), f.guard(), { true }, { true }))
         assertFalse(Files.exists(stage))
         assertTrue(f.stages().isEmpty())
         assertFalse(Files.exists(f.marker))
@@ -67,9 +67,9 @@ class AutoMediaStageOwnershipTest {
 
     @Test fun rejectionBeforeFirstPreparedRecordKeepsOneStageAndItsExactIdentity() = fixture { f ->
         var unknown: NativeSaveTargetRegistry.Registration? = null
-        val io = object : AutoMediaCopyIo by NioAutoMediaCopyIo {
+        val io = object : AutoMediaCopyIo by PortableAutoMediaCopyIo {
             override fun exists(path: Path): Boolean {
-                val exists = NioAutoMediaCopyIo.exists(path)
+                val exists = PortableAutoMediaCopyIo.exists(path)
                 if (path.parent == f.output && !path.fileName.toString().startsWith(".nnggram-auto-"))
                     unknown = f.registry.registerUnknown(4)
                 return exists
@@ -82,15 +82,15 @@ class AutoMediaStageOwnershipTest {
         assertEquals(listOf(stage), f.stages())
         assertEquals("source bytes", Files.readString(f.source))
         unknown!!.confirmedClosed()
-        assertIs<AutoMediaCopyResult.Saved>(AutoMediaCopyJournal().copy(f.request, f.guard(), { true }, { true }))
+        assertIs<AutoMediaCopyResult.Saved>(AutoMediaCopyJournal(PortableAutoMediaCopyIo).copy(f.request, f.guard(), { true }, { true }))
         assertFalse(Files.exists(stage))
     }
 
     @Test fun linkedPreparedRecordTakesOwnershipBeforeTheSlotIsReleased() = fixture { f ->
         var unknown: NativeSaveTargetRegistry.Registration? = null
-        val io = object : AutoMediaCopyIo by NioAutoMediaCopyIo {
+        val io = object : AutoMediaCopyIo by PortableAutoMediaCopyIo {
             override fun writeJournalAtomically(path: Path, record: AutoMediaCopyRecord) {
-                NioAutoMediaCopyIo.writeJournalAtomically(path, record)
+                PortableAutoMediaCopyIo.writeJournalAtomically(path, record)
                 if (record.state == AutoMediaCopyState.PREPARED) unknown = f.registry.registerUnknown(5)
             }
         }
@@ -99,14 +99,14 @@ class AutoMediaStageOwnershipTest {
         val (stage, identity) = f.owned()
         val binding = Properties().apply { Files.newBufferedReader(f.binding).use(::load) }
         val journal = Path.of(binding.getProperty("journal"))
-        val before = assertNotNull(NioAutoMediaCopyIo.loadJournal(journal))
+        val before = assertNotNull(PortableAutoMediaCopyIo.loadJournal(journal))
         assertEquals(stage, before.stage)
         assertEquals(identity, before.stageIdentity)
         assertEquals(binding.getProperty("intent"), before.intent)
         assertEquals("source bytes", Files.readString(stage))
         unknown!!.confirmedClosed()
-        val saved = assertIs<AutoMediaCopyResult.Saved>(AutoMediaCopyJournal().copy(f.request, f.guard(), { true }, { true }))
-        val after = assertNotNull(NioAutoMediaCopyIo.loadJournal(journal))
+        val saved = assertIs<AutoMediaCopyResult.Saved>(AutoMediaCopyJournal(PortableAutoMediaCopyIo).copy(f.request, f.guard(), { true }, { true }))
+        val after = assertNotNull(PortableAutoMediaCopyIo.loadJournal(journal))
         assertEquals(before.intent, after.intent)
         assertEquals(before.stageIdentity, after.stageIdentity)
         assertEquals(before.target, saved.path)
@@ -117,10 +117,10 @@ class AutoMediaStageOwnershipTest {
 
     @Test fun aReplacedStageIsNeverDeletedOrAdoptedAsTheOwnedFile() = fixture { f ->
         var unknown: NativeSaveTargetRegistry.Registration? = null
-        val io = object : AutoMediaCopyIo by NioAutoMediaCopyIo {
+        val io = object : AutoMediaCopyIo by PortableAutoMediaCopyIo {
             override fun prepareOwnedCopy(source: Path, destination: Path, nativeSize: Long, slot: AutoMediaStageSlot?,
                 active: () -> Boolean): AutoMediaPreparedCopy {
-                val prepared = NioAutoMediaCopyIo.prepareOwnedCopy(source, destination, nativeSize, slot, active)
+                val prepared = PortableAutoMediaCopyIo.prepareOwnedCopy(source, destination, nativeSize, slot, active)
                 unknown = f.registry.registerUnknown(6)
                 return prepared
             }
@@ -134,7 +134,7 @@ class AutoMediaStageOwnershipTest {
         Files.move(replacement, stage)
         unknown!!.confirmedClosed()
         repeat(2) {
-            val result = assertIs<AutoMediaCopyResult.Pending>(AutoMediaCopyJournal().copy(f.request, f.guard(), { true }, { true }))
+            val result = assertIs<AutoMediaCopyResult.Pending>(AutoMediaCopyJournal(PortableAutoMediaCopyIo).copy(f.request, f.guard(), { true }, { true }))
             assertEquals(AutoMediaCopyIssue.RECOVERY_AMBIGUOUS, result.issue)
             assertEquals("user data", Files.readString(stage))
             assertEquals(listOf(stage), f.stages())
@@ -144,10 +144,10 @@ class AutoMediaStageOwnershipTest {
 
     @Test fun identityMetadataReplacementCannotAuthorizeStageCleanup() = fixture { f ->
         var unknown: NativeSaveTargetRegistry.Registration? = null
-        val io = object : AutoMediaCopyIo by NioAutoMediaCopyIo {
+        val io = object : AutoMediaCopyIo by PortableAutoMediaCopyIo {
             override fun prepareOwnedCopy(source: Path, destination: Path, nativeSize: Long, slot: AutoMediaStageSlot?,
                 active: () -> Boolean): AutoMediaPreparedCopy {
-                val prepared = NioAutoMediaCopyIo.prepareOwnedCopy(source, destination, nativeSize, slot, active)
+                val prepared = PortableAutoMediaCopyIo.prepareOwnedCopy(source, destination, nativeSize, slot, active)
                 unknown = f.registry.registerUnknown(15)
                 return prepared
             }
@@ -160,7 +160,7 @@ class AutoMediaStageOwnershipTest {
         Files.delete(f.identityFile)
         Files.move(replacement, f.identityFile)
         unknown!!.confirmedClosed()
-        val result = assertIs<AutoMediaCopyResult.Pending>(AutoMediaCopyJournal().copy(f.request, f.guard(), { true }, { true }))
+        val result = assertIs<AutoMediaCopyResult.Pending>(AutoMediaCopyJournal(PortableAutoMediaCopyIo).copy(f.request, f.guard(), { true }, { true }))
         assertEquals(AutoMediaCopyIssue.RECOVERY_AMBIGUOUS, result.issue)
         assertContentEquals(bytes, Files.readAllBytes(f.identityFile))
         assertEquals(id, stableMediaFileIdentity(stage))
@@ -169,9 +169,9 @@ class AutoMediaStageOwnershipTest {
     }
 
     @Test fun preparedJournalWrittenBeforeAnOrdinaryExceptionStillOwnsItsStage() = fixture { f ->
-        val io = object : AutoMediaCopyIo by NioAutoMediaCopyIo {
+        val io = object : AutoMediaCopyIo by PortableAutoMediaCopyIo {
             override fun writeJournalAtomically(path: Path, record: AutoMediaCopyRecord) {
-                NioAutoMediaCopyIo.writeJournalAtomically(path, record)
+                PortableAutoMediaCopyIo.writeJournalAtomically(path, record)
                 if (record.state == AutoMediaCopyState.PREPARED) throw IOException("synthetic failure after journal move")
             }
         }
@@ -181,19 +181,19 @@ class AutoMediaStageOwnershipTest {
         val journal = Files.walk(journalRoot).use { paths ->
             paths.filter { it.fileName.toString().matches(Regex("[0-9a-f]{64}\\.properties")) }.findFirst().orElseThrow()
         }
-        val before = assertNotNull(NioAutoMediaCopyIo.loadJournal(journal))
+        val before = assertNotNull(PortableAutoMediaCopyIo.loadJournal(journal))
         assertEquals(AutoMediaCopyState.PREPARED, before.state)
         assertEquals("source bytes", Files.readString(before.stage))
         assertFalse(Files.exists(before.target))
-        assertIs<AutoMediaCopyResult.Saved>(AutoMediaCopyJournal().copy(f.request, f.guard(), { true }, { true }))
-        assertEquals(before.intent, NioAutoMediaCopyIo.loadJournal(journal)!!.intent)
+        assertIs<AutoMediaCopyResult.Saved>(AutoMediaCopyJournal(PortableAutoMediaCopyIo).copy(f.request, f.guard(), { true }, { true }))
+        assertEquals(before.intent, PortableAutoMediaCopyIo.loadJournal(journal)!!.intent)
     }
 
     @Test fun missingBoundJournalAfterPublicationPreservesBothFilesAndBlocksEveryRetry() = fixture { f ->
         var unknown: NativeSaveTargetRegistry.Registration? = null
-        val io = object : AutoMediaCopyIo by NioAutoMediaCopyIo {
+        val io = object : AutoMediaCopyIo by PortableAutoMediaCopyIo {
             override fun commitNoReplace(stage: Path, target: Path, active: () -> Boolean): String? {
-                val result = NioAutoMediaCopyIo.commitNoReplace(stage, target, active)
+                val result = PortableAutoMediaCopyIo.commitNoReplace(stage, target, active)
                 unknown = f.registry.registerUnknown(12)
                 return result
             }
@@ -202,13 +202,13 @@ class AutoMediaStageOwnershipTest {
         assertTrue(first.publicFileMayExist)
         val properties = Properties().apply { Files.newBufferedReader(f.binding).use(::load) }
         val journal = Path.of(properties.getProperty("journal"))
-        val record = assertNotNull(NioAutoMediaCopyIo.loadJournal(journal))
+        val record = assertNotNull(PortableAutoMediaCopyIo.loadJournal(journal))
         assertEquals("source bytes", Files.readString(record.target))
         assertEquals("source bytes", Files.readString(record.stage))
         unknown!!.confirmedClosed()
         Files.delete(journal) // This file and all contents belong to this synthetic fixture.
         repeat(3) {
-            val pending = assertIs<AutoMediaCopyResult.Pending>(AutoMediaCopyJournal().copy(f.request, f.guard(), { true }, { true }))
+            val pending = assertIs<AutoMediaCopyResult.Pending>(AutoMediaCopyJournal(PortableAutoMediaCopyIo).copy(f.request, f.guard(), { true }, { true }))
             assertEquals(AutoMediaCopyIssue.RECOVERY_AMBIGUOUS, pending.issue)
             assertTrue(pending.publicFileMayExist)
             assertTrue(Files.exists(f.marker))
@@ -220,10 +220,10 @@ class AutoMediaStageOwnershipTest {
     }
 
     @Test fun failedFirstJournalWriteAfterBindingKeepsTheStageAndReportsPending() = fixture { f ->
-        val io = object : AutoMediaCopyIo by NioAutoMediaCopyIo {
+        val io = object : AutoMediaCopyIo by PortableAutoMediaCopyIo {
             override fun writeJournalAtomically(path: Path, record: AutoMediaCopyRecord) {
                 if (record.state == AutoMediaCopyState.PREPARED) throw IOException("synthetic failure before journal write")
-                NioAutoMediaCopyIo.writeJournalAtomically(path, record)
+                PortableAutoMediaCopyIo.writeJournalAtomically(path, record)
             }
         }
         val first = assertIs<AutoMediaCopyResult.Pending>(AutoMediaCopyJournal(io).copy(f.request, f.guard(), { true }, { true }))
@@ -233,7 +233,7 @@ class AutoMediaStageOwnershipTest {
         val stage = Path.of(binding.getProperty("stage"))
         assertFalse(Files.exists(journal))
         repeat(2) {
-            val pending = assertIs<AutoMediaCopyResult.Pending>(AutoMediaCopyJournal().copy(f.request, f.guard(), { true }, { true }))
+            val pending = assertIs<AutoMediaCopyResult.Pending>(AutoMediaCopyJournal(PortableAutoMediaCopyIo).copy(f.request, f.guard(), { true }, { true }))
             assertEquals(AutoMediaCopyIssue.RECOVERY_AMBIGUOUS, pending.issue)
             assertEquals(listOf(stage), f.stages())
             assertEquals("source bytes", Files.readString(stage))
@@ -242,9 +242,9 @@ class AutoMediaStageOwnershipTest {
     }
 
     @Test fun unknownPublishedTargetIdentityKeepsPreparedStageAndIntent() = fixture { f ->
-        val io = object : AutoMediaCopyIo by NioAutoMediaCopyIo {
+        val io = object : AutoMediaCopyIo by PortableAutoMediaCopyIo {
             override fun commitNoReplace(stage: Path, target: Path, active: () -> Boolean): String? {
-                NioAutoMediaCopyIo.commitNoReplace(stage, target, active)
+                PortableAutoMediaCopyIo.commitNoReplace(stage, target, active)
                 return null
             }
         }
@@ -255,21 +255,21 @@ class AutoMediaStageOwnershipTest {
         val journal = Files.walk(journalRoot).use { paths ->
             paths.filter { it.fileName.toString().matches(Regex("[0-9a-f]{64}\\.properties")) }.findFirst().orElseThrow()
         }
-        val record = assertNotNull(NioAutoMediaCopyIo.loadJournal(journal))
+        val record = assertNotNull(PortableAutoMediaCopyIo.loadJournal(journal))
         assertEquals(AutoMediaCopyState.PREPARED, record.state)
         assertEquals("source bytes", Files.readString(record.stage))
         assertEquals("source bytes", Files.readString(record.target))
-        val recovered = assertIs<AutoMediaCopyResult.Saved>(AutoMediaCopyJournal().copy(f.request, f.guard(), { true }, { true }))
+        val recovered = assertIs<AutoMediaCopyResult.Saved>(AutoMediaCopyJournal(PortableAutoMediaCopyIo).copy(f.request, f.guard(), { true }, { true }))
         assertEquals(record.target, recovered.path)
-        assertEquals(record.intent, NioAutoMediaCopyIo.loadJournal(journal)!!.intent)
+        assertEquals(record.intent, PortableAutoMediaCopyIo.loadJournal(journal)!!.intent)
     }
 
     @Test fun semanticJournalCorruptionNeverTransfersTheSlotOrCreatesANewStage() {
         for (mutation in listOf("key", "scope", "both-scope", "target", "hash", "stage-bytes")) fixture { f ->
             var unknown: NativeSaveTargetRegistry.Registration? = null
-            val io = object : AutoMediaCopyIo by NioAutoMediaCopyIo {
+            val io = object : AutoMediaCopyIo by PortableAutoMediaCopyIo {
                 override fun writeJournalAtomically(path: Path, record: AutoMediaCopyRecord) {
-                    NioAutoMediaCopyIo.writeJournalAtomically(path, record)
+                    PortableAutoMediaCopyIo.writeJournalAtomically(path, record)
                     if (record.state == AutoMediaCopyState.PREPARED) unknown = f.registry.registerUnknown(13)
                 }
             }
@@ -277,7 +277,7 @@ class AutoMediaStageOwnershipTest {
                 AutoMediaCopyJournal(io).copy(f.request, f.guard(), { true }, { true }))
             val binding = Properties().apply { Files.newBufferedReader(f.binding).use(::load) }
             val journal = Path.of(binding.getProperty("journal"))
-            val old = assertNotNull(NioAutoMediaCopyIo.loadJournal(journal))
+            val old = assertNotNull(PortableAutoMediaCopyIo.loadJournal(journal))
             val beforeStageId = stableMediaFileIdentity(old.stage)
             unknown!!.confirmedClosed()
             if (mutation == "stage-bytes") Files.writeString(old.stage, "changed stage bytes")
@@ -297,7 +297,7 @@ class AutoMediaStageOwnershipTest {
                 Files.newBufferedWriter(journal).use { p.store(it, "synthetic corrupt record") }
             }
             repeat(2) {
-                val pending = assertIs<AutoMediaCopyResult.Pending>(AutoMediaCopyJournal().copy(f.request, f.guard(), { true }, { true }))
+                val pending = assertIs<AutoMediaCopyResult.Pending>(AutoMediaCopyJournal(PortableAutoMediaCopyIo).copy(f.request, f.guard(), { true }, { true }))
                 assertEquals(AutoMediaCopyIssue.RECOVERY_AMBIGUOUS, pending.issue, mutation)
                 assertTrue(Files.exists(f.marker), mutation)
                 assertTrue(Files.exists(f.binding), mutation)
@@ -311,9 +311,9 @@ class AutoMediaStageOwnershipTest {
 
     @Test fun corruptCommittedJournalPreservesThePublishedCopyAndStageBeforeTransfer() = fixture { f ->
         var journal: Path? = null
-        val io = object : AutoMediaCopyIo by NioAutoMediaCopyIo {
+        val io = object : AutoMediaCopyIo by PortableAutoMediaCopyIo {
             override fun writeJournalAtomically(path: Path, record: AutoMediaCopyRecord) {
-                NioAutoMediaCopyIo.writeJournalAtomically(path, record)
+                PortableAutoMediaCopyIo.writeJournalAtomically(path, record)
                 if (record.state == AutoMediaCopyState.COMMITTED) {
                     journal = path
                     val properties = Properties().apply { Files.newBufferedReader(path).use(::load) }
@@ -331,7 +331,7 @@ class AutoMediaStageOwnershipTest {
         assertEquals("source bytes", Files.readString(stage))
         assertEquals("source bytes", Files.readString(target))
         repeat(2) {
-            val pending = assertIs<AutoMediaCopyResult.Pending>(AutoMediaCopyJournal().copy(f.request, f.guard(), { true }, { true }))
+            val pending = assertIs<AutoMediaCopyResult.Pending>(AutoMediaCopyJournal(PortableAutoMediaCopyIo).copy(f.request, f.guard(), { true }, { true }))
             assertEquals(AutoMediaCopyIssue.RECOVERY_AMBIGUOUS, pending.issue)
             assertTrue(Files.exists(f.marker))
             assertTrue(Files.exists(checkNotNull(journal)))
@@ -342,9 +342,9 @@ class AutoMediaStageOwnershipTest {
 
     @Test fun missingBindingAfterItWasStartedCannotBeTreatedAsAnUnboundStage() = fixture { f ->
         var unknown: NativeSaveTargetRegistry.Registration? = null
-        val io = object : AutoMediaCopyIo by NioAutoMediaCopyIo {
+        val io = object : AutoMediaCopyIo by PortableAutoMediaCopyIo {
             override fun writeJournalAtomically(path: Path, record: AutoMediaCopyRecord) {
-                NioAutoMediaCopyIo.writeJournalAtomically(path, record)
+                PortableAutoMediaCopyIo.writeJournalAtomically(path, record)
                 if (record.state == AutoMediaCopyState.PREPARED) unknown = f.registry.registerUnknown(14)
             }
         }
@@ -353,27 +353,27 @@ class AutoMediaStageOwnershipTest {
         val (stage, id) = f.owned()
         val binding = Properties().apply { Files.newBufferedReader(f.binding).use(::load) }
         val journal = Path.of(binding.getProperty("journal"))
-        val original = assertNotNull(NioAutoMediaCopyIo.loadJournal(journal))
+        val original = assertNotNull(PortableAutoMediaCopyIo.loadJournal(journal))
         unknown!!.confirmedClosed()
         Files.delete(f.binding)
         repeat(2) {
-            val result = assertIs<AutoMediaCopyResult.Pending>(AutoMediaCopyJournal().copy(f.request, f.guard(), { true }, { true }))
+            val result = assertIs<AutoMediaCopyResult.Pending>(AutoMediaCopyJournal(PortableAutoMediaCopyIo).copy(f.request, f.guard(), { true }, { true }))
             assertEquals(AutoMediaCopyIssue.RECOVERY_AMBIGUOUS, result.issue)
             assertTrue(Files.exists(f.marker))
             assertEquals(id, stableMediaFileIdentity(stage))
-            assertEquals(original.intent, NioAutoMediaCopyIo.loadJournal(journal)!!.intent)
+            assertEquals(original.intent, PortableAutoMediaCopyIo.loadJournal(journal)!!.intent)
             assertEquals(listOf(stage), f.stages())
         }
     }
 
     @Test fun replacingTheStageNameBeforeTheFirstWriteCannotWriteTheReplacement() = fixture { f ->
-        if (!System.getProperty("os.name").startsWith("Windows", true)) return@fixture
+        org.junit.Assume.assumeTrue("Actual Win32 handle integration", com.sun.jna.Platform.isWindows())
         val replacement = f.root.resolve("user-replacement").also { Files.writeString(it, "user file") }
         val displaced = f.root.resolve("original-stage-object")
         var swapped = false
-        val files = object : AutoMediaOwnedFiles by WindowsAutoMediaOwnedFiles {
+        val files = object : AutoMediaOwnedFiles by portableAutoMediaOwnedFiles {
             override fun createNew(path: Path): AutoMediaOwnedFile {
-                if (!path.fileName.toString().startsWith(".nnggram-auto-")) return WindowsAutoMediaOwnedFiles.createNew(path)
+                if (!path.fileName.toString().startsWith(".nnggram-auto-")) return portableAutoMediaOwnedFiles.createNew(path)
                 // Deliberately permits rename to model an adversarial filesystem; the writer
                 // still holds the originally created channel and never reopens the pathname.
                 val channel = FileChannel.open(path, StandardOpenOption.CREATE_NEW, StandardOpenOption.READ, StandardOpenOption.WRITE)
@@ -397,7 +397,7 @@ class AutoMediaStageOwnershipTest {
                 }
             }
         }
-        val io = object : AutoMediaCopyIo by NioAutoMediaCopyIo { override val ownedFiles = files }
+        val io = object : AutoMediaCopyIo by PortableAutoMediaCopyIo { override val ownedFiles = files }
         val result = assertIs<AutoMediaCopyResult.Pending>(AutoMediaCopyJournal(io).copy(f.request, f.guard(), { true }, { true }))
         assertEquals(AutoMediaCopyIssue.RECOVERY_AMBIGUOUS, result.issue)
         assertTrue(swapped)
@@ -442,7 +442,7 @@ class AutoMediaStageOwnershipTest {
     }
 
     @Test fun windowsHandlesDenyReplacementThroughoutWriteAndDeletion() = fixture { f ->
-        if (!System.getProperty("os.name").startsWith("Windows", true)) return@fixture
+        org.junit.Assume.assumeTrue("Actual Win32 handle integration", com.sun.jna.Platform.isWindows())
         val stage = Files.createDirectories(f.output).resolve(".nnggram-auto-locked.part")
         val replacement = f.root.resolve("replacement").also { Files.writeString(it, "user file") }
         val identity = WindowsAutoMediaOwnedFiles.createNew(stage).use { held ->
@@ -463,7 +463,7 @@ class AutoMediaStageOwnershipTest {
     }
 
     @Test fun windowsProtectedStageCanBeLinkedAndDeletingItsNameKeepsThePublicLink() = fixture { f ->
-        if (!System.getProperty("os.name").startsWith("Windows", true)) return@fixture
+        org.junit.Assume.assumeTrue("Actual Win32 handle integration", com.sun.jna.Platform.isWindows())
         val stage = Files.createDirectories(f.output).resolve(".nnggram-auto-link.part")
         val target = f.output.resolve("public.bin")
         val id = WindowsAutoMediaOwnedFiles.createNew(stage).use { held ->
@@ -483,11 +483,11 @@ class AutoMediaStageOwnershipTest {
     }
 
     @Test fun preparedPublishedTargetRemainsHeldThroughAuthorizationAndCommit() = fixture { f ->
-        if (!System.getProperty("os.name").startsWith("Windows", true)) return@fixture
+        org.junit.Assume.assumeTrue("Actual Win32 handle integration", com.sun.jna.Platform.isWindows())
         val (journal, record) = publishedPrepared(f)
         val replacement = f.root.resolve("replacement-target").also { Files.writeString(it, "user replacement") }
         var refused = false
-        val saved = assertIs<AutoMediaCopyResult.Saved>(AutoMediaCopyJournal().copy(f.request, f.guard(), { true }) {
+        val saved = assertIs<AutoMediaCopyResult.Saved>(AutoMediaCopyJournal(PortableAutoMediaCopyIo).copy(f.request, f.guard(), { true }) {
             refused = runCatching { Files.move(replacement, record.target, StandardCopyOption.REPLACE_EXISTING) }.isFailure
             true
         })
@@ -495,18 +495,18 @@ class AutoMediaStageOwnershipTest {
         assertEquals(record.target, saved.path)
         assertEquals("source bytes", Files.readString(saved.path))
         assertEquals("user replacement", Files.readString(replacement))
-        assertEquals(AutoMediaCopyState.COMMITTED, NioAutoMediaCopyIo.loadJournal(journal)!!.state)
+        assertEquals(AutoMediaCopyState.COMMITTED, PortableAutoMediaCopyIo.loadJournal(journal)!!.state)
         assertFalse(Files.exists(record.stage), "The held target is closed before stage deletion")
     }
 
     @Test fun forcedTargetReplacementDuringAuthorizationCannotBeCommitted() = fixture { f ->
-        if (!System.getProperty("os.name").startsWith("Windows", true)) return@fixture
+        org.junit.Assume.assumeTrue("Actual Win32 handle integration", com.sun.jna.Platform.isWindows())
         val (journal, record) = publishedPrepared(f)
         val replacement = f.root.resolve("replacement-target").also { Files.writeString(it, "user replacement") }
         val displaced = f.root.resolve("displaced-public-link")
-        val files = object : AutoMediaOwnedFiles by WindowsAutoMediaOwnedFiles {
+        val files = object : AutoMediaOwnedFiles by portableAutoMediaOwnedFiles {
             override fun openRead(path: Path): AutoMediaOwnedFile {
-                if (path != record.target) return WindowsAutoMediaOwnedFiles.openRead(path)
+                if (path != record.target) return portableAutoMediaOwnedFiles.openRead(path)
                 // Deliberately relax sharing to model a nonconforming adapter; the pathname
                 // recheck still must not adopt the replacement's different file identity.
                 val channel = FileChannel.open(path, StandardOpenOption.READ)
@@ -522,7 +522,7 @@ class AutoMediaStageOwnershipTest {
                 }
             }
         }
-        val io = object : AutoMediaCopyIo by NioAutoMediaCopyIo { override val ownedFiles = files }
+        val io = object : AutoMediaCopyIo by PortableAutoMediaCopyIo { override val ownedFiles = files }
         val result = assertIs<AutoMediaCopyResult.Pending>(AutoMediaCopyJournal(io).copy(f.request, f.guard(), { true }) {
             Files.move(record.target, displaced)
             Files.move(replacement, record.target)
@@ -530,7 +530,7 @@ class AutoMediaStageOwnershipTest {
         })
         assertEquals(AutoMediaCopyIssue.RECOVERY_AMBIGUOUS, result.issue)
         assertTrue(result.publicFileMayExist)
-        assertEquals(AutoMediaCopyState.PREPARED, NioAutoMediaCopyIo.loadJournal(journal)!!.state)
+        assertEquals(AutoMediaCopyState.PREPARED, PortableAutoMediaCopyIo.loadJournal(journal)!!.state)
         assertEquals("source bytes", Files.readString(record.stage))
         assertEquals("source bytes", Files.readString(displaced))
         assertEquals("user replacement", Files.readString(record.target))
@@ -538,37 +538,37 @@ class AutoMediaStageOwnershipTest {
 
     @Test fun publishedPreparedAuthorizationRefusalPreservesStageAndIntent() = fixture { f ->
         val (journal, record) = publishedPrepared(f)
-        val result = assertIs<AutoMediaCopyResult.Pending>(AutoMediaCopyJournal().copy(f.request, f.guard(), { true }, { false }))
+        val result = assertIs<AutoMediaCopyResult.Pending>(AutoMediaCopyJournal(PortableAutoMediaCopyIo).copy(f.request, f.guard(), { true }, { false }))
         assertEquals(AutoMediaCopyIssue.RECOVERY_AMBIGUOUS, result.issue)
         assertTrue(result.publicFileMayExist)
-        assertEquals(record, NioAutoMediaCopyIo.loadJournal(journal))
+        assertEquals(record, PortableAutoMediaCopyIo.loadJournal(journal))
         assertEquals("source bytes", Files.readString(record.stage))
         assertEquals("source bytes", Files.readString(record.target))
-        assertIs<AutoMediaCopyResult.Saved>(AutoMediaCopyJournal().copy(f.request, f.guard(), { true }, { true }))
+        assertIs<AutoMediaCopyResult.Saved>(AutoMediaCopyJournal(PortableAutoMediaCopyIo).copy(f.request, f.guard(), { true }, { true }))
         assertFalse(Files.exists(record.stage))
     }
 
     @Test fun publishedPreparedCommitWriteFailureRetainsTheStageBeforeOrAfterMove() {
         for (afterWrite in listOf(false, true)) fixture { f ->
             val (journal, record) = publishedPrepared(f)
-            val io = object : AutoMediaCopyIo by NioAutoMediaCopyIo {
+            val io = object : AutoMediaCopyIo by PortableAutoMediaCopyIo {
                 override fun writeJournalAtomically(path: Path, value: AutoMediaCopyRecord) {
                     if (value.state == AutoMediaCopyState.COMMITTED) {
-                        if (afterWrite) NioAutoMediaCopyIo.writeJournalAtomically(path, value)
+                        if (afterWrite) PortableAutoMediaCopyIo.writeJournalAtomically(path, value)
                         throw IOException("synthetic commit write failure")
                     }
-                    NioAutoMediaCopyIo.writeJournalAtomically(path, value)
+                    PortableAutoMediaCopyIo.writeJournalAtomically(path, value)
                 }
             }
             val pending = assertIs<AutoMediaCopyResult.Pending>(AutoMediaCopyJournal(io).copy(f.request, f.guard(), { true }, { true }))
             assertEquals(AutoMediaCopyIssue.PUBLIC_WRITTEN_RECORD_PENDING, pending.issue)
             assertTrue(pending.publicFileMayExist)
-            val persisted = assertNotNull(NioAutoMediaCopyIo.loadJournal(journal))
+            val persisted = assertNotNull(PortableAutoMediaCopyIo.loadJournal(journal))
             assertEquals(if (afterWrite) AutoMediaCopyState.COMMITTED else AutoMediaCopyState.PREPARED, persisted.state)
             assertEquals(record.intent, persisted.intent)
             assertEquals("source bytes", Files.readString(record.stage))
             assertEquals("source bytes", Files.readString(record.target))
-            assertIs<AutoMediaCopyResult.Saved>(AutoMediaCopyJournal().copy(f.request, f.guard(), { true }, { true }))
+            assertIs<AutoMediaCopyResult.Saved>(AutoMediaCopyJournal(PortableAutoMediaCopyIo).copy(f.request, f.guard(), { true }, { true }))
             assertFalse(Files.exists(record.stage))
         }
     }
@@ -582,16 +582,16 @@ class AutoMediaStageOwnershipTest {
     }
 
     @Test fun transferredPreparedRecordWithTargetIdentityIsNotPublishedOrCleaned() = fixture { f ->
-        assertIs<AutoMediaCopyResult.Retired>(AutoMediaCopyJournal().copy(f.request, f.guard(), { true }, { false }))
+        assertIs<AutoMediaCopyResult.Retired>(AutoMediaCopyJournal(PortableAutoMediaCopyIo).copy(f.request, f.guard(), { true }, { false }))
         val (journal, prepared) = f.journals().single()
         assertEquals(AutoMediaCopyState.PREPARED, prepared.state)
         val corrupted = prepared.copy(targetIdentity = prepared.stageIdentity)
-        NioAutoMediaCopyIo.writeJournalAtomically(journal, corrupted)
+        PortableAutoMediaCopyIo.writeJournalAtomically(journal, corrupted)
         repeat(2) {
-            val pending = assertIs<AutoMediaCopyResult.Pending>(AutoMediaCopyJournal().copy(f.request, f.guard(), { true }, { true }))
+            val pending = assertIs<AutoMediaCopyResult.Pending>(AutoMediaCopyJournal(PortableAutoMediaCopyIo).copy(f.request, f.guard(), { true }, { true }))
             assertEquals(AutoMediaCopyIssue.RECOVERY_AMBIGUOUS, pending.issue)
             assertTrue(pending.publicFileMayExist)
-            assertEquals(corrupted, NioAutoMediaCopyIo.loadJournal(journal))
+            assertEquals(corrupted, PortableAutoMediaCopyIo.loadJournal(journal))
             assertEquals(prepared.stageIdentity, stableMediaFileIdentity(prepared.stage))
             assertEquals("source bytes", Files.readString(prepared.stage))
             assertFalse(Files.exists(prepared.target))
@@ -603,44 +603,44 @@ class AutoMediaStageOwnershipTest {
         val (journal, prepared) = baselineNamedPrepared(f, f.request)
         Files.createLink(prepared.target, prepared.stage)
         val committed = prepared.copy(state = AutoMediaCopyState.COMMITTED, targetIdentity = prepared.stageIdentity)
-        NioAutoMediaCopyIo.writeJournalAtomically(journal, committed)
-        val first = assertIs<AutoMediaCopyResult.Saved>(AutoMediaCopyJournal().copy(f.request, f.guard(), { true }, { true }))
+        PortableAutoMediaCopyIo.writeJournalAtomically(journal, committed)
+        val first = assertIs<AutoMediaCopyResult.Saved>(AutoMediaCopyJournal(PortableAutoMediaCopyIo).copy(f.request, f.guard(), { true }, { true }))
         assertTrue(first.alreadyPresent)
         assertEquals(prepared.target, first.path)
-        assertEquals(committed, NioAutoMediaCopyIo.loadJournal(journal))
+        assertEquals(committed, PortableAutoMediaCopyIo.loadJournal(journal))
         assertFalse(Files.exists(prepared.stage))
         assertEquals("source bytes", Files.readString(first.path))
-        assertTrue(assertIs<AutoMediaCopyResult.Saved>(AutoMediaCopyJournal().copy(f.request, f.guard(), { true }, { true })).alreadyPresent)
+        assertTrue(assertIs<AutoMediaCopyResult.Saved>(AutoMediaCopyJournal(PortableAutoMediaCopyIo).copy(f.request, f.guard(), { true }, { true })).alreadyPresent)
         Files.list(f.output).use { assertEquals(1L, it.count()) }
     }
 
     @Test fun baselineNamedUnpublishedPreparedJournalResumesItsOriginalIntent() = fixture { f ->
         val (journal, prepared) = baselineNamedPrepared(f, f.request)
         assertFalse(Files.exists(prepared.target))
-        val saved = assertIs<AutoMediaCopyResult.Saved>(AutoMediaCopyJournal().copy(f.request, f.guard(), { true }, { true }))
+        val saved = assertIs<AutoMediaCopyResult.Saved>(AutoMediaCopyJournal(PortableAutoMediaCopyIo).copy(f.request, f.guard(), { true }, { true }))
         assertEquals(prepared.target, saved.path)
-        val committed = assertNotNull(NioAutoMediaCopyIo.loadJournal(journal))
+        val committed = assertNotNull(PortableAutoMediaCopyIo.loadJournal(journal))
         assertEquals(prepared.intent, committed.intent)
         assertEquals(prepared.stageIdentity, committed.targetIdentity)
         assertEquals(AutoMediaCopyState.COMMITTED, committed.state)
         assertFalse(Files.exists(prepared.stage))
         assertEquals("source bytes", Files.readString(saved.path))
-        assertTrue(assertIs<AutoMediaCopyResult.Saved>(AutoMediaCopyJournal().copy(f.request, f.guard(), { true }, { true })).alreadyPresent)
+        assertTrue(assertIs<AutoMediaCopyResult.Saved>(AutoMediaCopyJournal(PortableAutoMediaCopyIo).copy(f.request, f.guard(), { true }, { true })).alreadyPresent)
         Files.list(f.output).use { assertEquals(1L, it.count()) }
     }
 
     @Test fun baselineNamedPublishedPreparedJournalCommitsWithoutAnotherCopy() = fixture { f ->
         val (journal, prepared) = baselineNamedPrepared(f, f.request)
         Files.createLink(prepared.target, prepared.stage)
-        val saved = assertIs<AutoMediaCopyResult.Saved>(AutoMediaCopyJournal().copy(f.request, f.guard(), { true }, { true }))
+        val saved = assertIs<AutoMediaCopyResult.Saved>(AutoMediaCopyJournal(PortableAutoMediaCopyIo).copy(f.request, f.guard(), { true }, { true }))
         assertEquals(prepared.target, saved.path)
-        val committed = assertNotNull(NioAutoMediaCopyIo.loadJournal(journal))
+        val committed = assertNotNull(PortableAutoMediaCopyIo.loadJournal(journal))
         assertEquals(prepared.intent, committed.intent)
         assertEquals(prepared.stageIdentity, committed.targetIdentity)
         assertEquals(AutoMediaCopyState.COMMITTED, committed.state)
         assertFalse(Files.exists(prepared.stage))
         assertEquals("source bytes", Files.readString(saved.path))
-        assertTrue(assertIs<AutoMediaCopyResult.Saved>(AutoMediaCopyJournal().copy(f.request, f.guard(), { true }, { true })).alreadyPresent)
+        assertTrue(assertIs<AutoMediaCopyResult.Saved>(AutoMediaCopyJournal(PortableAutoMediaCopyIo).copy(f.request, f.guard(), { true }, { true })).alreadyPresent)
         Files.list(f.output).use { assertEquals(1L, it.count()) }
     }
 
@@ -649,20 +649,20 @@ class AutoMediaStageOwnershipTest {
             val (journalA, preparedA) = baselineNamedPrepared(f, f.request)
             Files.createLink(preparedA.target, preparedA.stage)
             val committedA = preparedA.copy(state = AutoMediaCopyState.COMMITTED, targetIdentity = preparedA.stageIdentity)
-            NioAutoMediaCopyIo.writeJournalAtomically(journalA, committedA)
+            PortableAutoMediaCopyIo.writeJournalAtomically(journalA, committedA)
             val requestB = f.request.copy(remoteUniqueId = "second-old-intent", suggestedName = "other.txt")
             val (journalB, preparedB) = baselineNamedPrepared(f, requestB)
             assertNotEquals(preparedA.intent, preparedB.intent)
             assertNotEquals(preparedA.stageIdentity, preparedB.stageIdentity)
             val corruptA = committedA.copy(stage = preparedB.stage,
                 stageIdentity = if (replaceIdentity) preparedB.stageIdentity else committedA.stageIdentity)
-            NioAutoMediaCopyIo.writeJournalAtomically(journalA, corruptA)
+            PortableAutoMediaCopyIo.writeJournalAtomically(journalA, corruptA)
             repeat(2) {
-                val pending = assertIs<AutoMediaCopyResult.Pending>(AutoMediaCopyJournal().copy(f.request, f.guard(), { true }, { true }))
+                val pending = assertIs<AutoMediaCopyResult.Pending>(AutoMediaCopyJournal(PortableAutoMediaCopyIo).copy(f.request, f.guard(), { true }, { true }))
                 assertEquals(AutoMediaCopyIssue.RECOVERY_AMBIGUOUS, pending.issue)
                 assertTrue(pending.publicFileMayExist)
-                assertEquals(corruptA, NioAutoMediaCopyIo.loadJournal(journalA))
-                assertEquals(preparedB, NioAutoMediaCopyIo.loadJournal(journalB))
+                assertEquals(corruptA, PortableAutoMediaCopyIo.loadJournal(journalA))
+                assertEquals(preparedB, PortableAutoMediaCopyIo.loadJournal(journalB))
                 assertEquals(preparedB.stageIdentity, stableMediaFileIdentity(preparedB.stage))
                 assertEquals("source bytes", Files.readString(preparedB.stage))
                 assertEquals("source bytes", Files.readString(preparedA.target))
@@ -682,10 +682,10 @@ class AutoMediaStageOwnershipTest {
                 "identity" -> prepared.copy(stageIdentity = "wrong-identity")
                 else -> prepared.copy(contentHash = "c".repeat(64))
             }
-            NioAutoMediaCopyIo.writeJournalAtomically(journal, bad)
-            val pending = assertIs<AutoMediaCopyResult.Pending>(AutoMediaCopyJournal().copy(f.request, f.guard(), { true }, { true }))
+            PortableAutoMediaCopyIo.writeJournalAtomically(journal, bad)
+            val pending = assertIs<AutoMediaCopyResult.Pending>(AutoMediaCopyJournal(PortableAutoMediaCopyIo).copy(f.request, f.guard(), { true }, { true }))
             assertEquals(AutoMediaCopyIssue.RECOVERY_AMBIGUOUS, pending.issue, mutation)
-            assertEquals(bad, NioAutoMediaCopyIo.loadJournal(journal), mutation)
+            assertEquals(bad, PortableAutoMediaCopyIo.loadJournal(journal), mutation)
             assertEquals(prepared.stageIdentity, stableMediaFileIdentity(prepared.stage), mutation)
             assertEquals("source bytes", Files.readString(prepared.stage), mutation)
             assertFalse(Files.exists(prepared.target), mutation)
@@ -702,12 +702,12 @@ class AutoMediaStageOwnershipTest {
             }
         }
         assertEquals(AutoMediaCopyResult.Pending(AutoMediaCopyIssue.RECOVERY_AMBIGUOUS),
-            AutoMediaCopyJournal().copy(f.request, guarded, { true }, { true }))
+            AutoMediaCopyJournal(PortableAutoMediaCopyIo).copy(f.request, guarded, { true }, { true }))
         val (stage, identity) = f.owned()
         assertNull(identity)
         Files.createFile(stage) // Simulate process death between CREATE_NEW and identity persistence.
         repeat(3) {
-            val result = assertIs<AutoMediaCopyResult.Pending>(AutoMediaCopyJournal().copy(f.request, f.guard(), { true }, { true }))
+            val result = assertIs<AutoMediaCopyResult.Pending>(AutoMediaCopyJournal(PortableAutoMediaCopyIo).copy(f.request, f.guard(), { true }, { true }))
             assertEquals(AutoMediaCopyIssue.RECOVERY_AMBIGUOUS, result.issue)
             assertEquals(listOf(stage), f.stages())
             assertEquals(0L, Files.size(stage))
@@ -740,13 +740,13 @@ class AutoMediaStageOwnershipTest {
         fun journals(): List<Pair<Path, AutoMediaCopyRecord>> = if (!Files.exists(marker.parent)) emptyList() else
             Files.walk(marker.parent).use { paths -> paths.filter {
                 it.fileName.toString().matches(Regex("[0-9a-f]{64}\\.properties"))
-            }.map { it to checkNotNull(NioAutoMediaCopyIo.loadJournal(it)) }.toList() }
+            }.map { it to checkNotNull(PortableAutoMediaCopyIo.loadJournal(it)) }.toList() }
     }
 
     private fun publishedPrepared(f: Fixture): Pair<Path, AutoMediaCopyRecord> {
-        val io = object : AutoMediaCopyIo by NioAutoMediaCopyIo {
+        val io = object : AutoMediaCopyIo by PortableAutoMediaCopyIo {
             override fun commitNoReplace(stage: Path, target: Path, active: () -> Boolean): String? {
-                NioAutoMediaCopyIo.commitNoReplace(stage, target, active)
+                PortableAutoMediaCopyIo.commitNoReplace(stage, target, active)
                 throw IOException("synthetic failure after public link")
             }
         }
@@ -762,7 +762,7 @@ class AutoMediaStageOwnershipTest {
 
     /** Construct the exact previous createTempFile stage shape in this synthetic fixture. */
     private fun baselineNamedPrepared(f: Fixture, request: AutoMediaCopyRequest): Pair<Path, AutoMediaCopyRecord> {
-        assertIs<AutoMediaCopyResult.Retired>(AutoMediaCopyJournal().copy(request, f.guard(), { true }, { false }))
+        assertIs<AutoMediaCopyResult.Retired>(AutoMediaCopyJournal(PortableAutoMediaCopyIo).copy(request, f.guard(), { true }, { false }))
         val (journal, generated) = f.journals().single {
             it.second.state == AutoMediaCopyState.PREPARED && it.second.target.fileName.toString() == request.suggestedName
         }
@@ -772,14 +772,14 @@ class AutoMediaStageOwnershipTest {
         val identity = assertNotNull(stableMediaFileIdentity(stage))
         Files.delete(generated.stage)
         val originalStyle = generated.copy(stage = stage, stageIdentity = identity)
-        NioAutoMediaCopyIo.writeJournalAtomically(journal, originalStyle)
+        PortableAutoMediaCopyIo.writeJournalAtomically(journal, originalStyle)
         return journal to originalStyle
     }
 
     private fun wrongBoundIntent(f: Fixture, replaceIdentity: Boolean) {
-        val first = assertIs<AutoMediaCopyResult.Saved>(AutoMediaCopyJournal().copy(f.request, f.guard(), { true }, { true }))
+        val first = assertIs<AutoMediaCopyResult.Saved>(AutoMediaCopyJournal(PortableAutoMediaCopyIo).copy(f.request, f.guard(), { true }, { true }))
         val secondRequest = f.request.copy(remoteUniqueId = "second-intent", suggestedName = "second.txt")
-        assertIs<AutoMediaCopyResult.Retired>(AutoMediaCopyJournal().copy(secondRequest, f.guard(), { true }, { false }))
+        assertIs<AutoMediaCopyResult.Retired>(AutoMediaCopyJournal(PortableAutoMediaCopyIo).copy(secondRequest, f.guard(), { true }, { false }))
         val entries = f.journals()
         val (committedPath, committed) = entries.single { it.second.target == first.path }
         val (preparedPath, prepared) = entries.single { it.second.state == AutoMediaCopyState.PREPARED }
@@ -787,13 +787,13 @@ class AutoMediaStageOwnershipTest {
         assertNotEquals(committed.targetIdentity, prepared.stageIdentity)
         val corrupted = committed.copy(stage = prepared.stage,
             stageIdentity = if (replaceIdentity) prepared.stageIdentity else committed.stageIdentity)
-        NioAutoMediaCopyIo.writeJournalAtomically(committedPath, corrupted)
+        PortableAutoMediaCopyIo.writeJournalAtomically(committedPath, corrupted)
         repeat(2) {
-            val pending = assertIs<AutoMediaCopyResult.Pending>(AutoMediaCopyJournal().copy(f.request, f.guard(), { true }, { true }))
+            val pending = assertIs<AutoMediaCopyResult.Pending>(AutoMediaCopyJournal(PortableAutoMediaCopyIo).copy(f.request, f.guard(), { true }, { true }))
             assertEquals(AutoMediaCopyIssue.RECOVERY_AMBIGUOUS, pending.issue)
             assertTrue(pending.publicFileMayExist)
-            assertEquals(corrupted, NioAutoMediaCopyIo.loadJournal(committedPath))
-            assertEquals(prepared, NioAutoMediaCopyIo.loadJournal(preparedPath))
+            assertEquals(corrupted, PortableAutoMediaCopyIo.loadJournal(committedPath))
+            assertEquals(prepared, PortableAutoMediaCopyIo.loadJournal(preparedPath))
             assertEquals(prepared.stageIdentity, stableMediaFileIdentity(prepared.stage))
             assertEquals("source bytes", Files.readString(prepared.stage))
             assertEquals("source bytes", Files.readString(first.path))

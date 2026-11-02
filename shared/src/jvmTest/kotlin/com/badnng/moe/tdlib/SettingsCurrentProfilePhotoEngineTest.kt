@@ -191,7 +191,7 @@ class SettingsCurrentProfilePhotoEngineTest {
     }
 
     private suspend fun TestScope.withEngine(block: suspend TestScope.(TdEngine, Fixture, SettingsProfileExtrasToken) -> Unit) {
-        val f = Fixture(); val engine = TdEngine(f.store, f, StandardTestDispatcher(testScheduler))
+        val f = Fixture(); val engine = syntheticOpenEngine(f.store, f, StandardTestDispatcher(testScheduler))
         try {
             assertTrue(engine.start()); runCurrent()
             f.auth(AuthorizationPhase.WAITING_PARAMETERS); runCurrent()
@@ -220,7 +220,7 @@ class SettingsCurrentProfilePhotoEngineTest {
         override fun create(onAuthorization: (AuthorizationDetails) -> Unit, onConnection: (ConnectionPhase) -> Unit,
             onError: () -> Unit, onChatEvent: (ChatEvent) -> Unit): TdSession {
             authorization = onAuthorization
-            return object : TdSession {
+            return object : SyntheticOpenKeySession {
                 override fun authorizationReady() = this@Fixture.ready
                 override val interactionGate = gate
                 override val settings: TdSettingsSession = this@Fixture.settings

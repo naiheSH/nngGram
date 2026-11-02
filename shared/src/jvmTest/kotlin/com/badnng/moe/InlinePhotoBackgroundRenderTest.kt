@@ -142,7 +142,7 @@ class InlinePhotoBackgroundRenderTest {
         var downloads = 0
         var neutral = 0
         val media = MessageMedia(MediaFile(1, localPath = full?.toString(), downloaded = full != null),
-            thumbnail = MediaFile(2, localPath = thumbnail?.toString(), downloaded = thumbnail != null, canDownload = true),
+            thumbnail = MediaFile(2, localPath = thumbnail?.toString(), downloaded = thumbnail != null, canDownload = thumbnail != null),
             width = sourceWidth, height = sourceHeight, thumbnailFormat = MediaFormat.PHOTO)
         val snapshot = ChatSnapshot(enabled = true, token = ChatToken(1, 1, 10), selected = ChatItem(10, "Synthetic photo"))
         fun scene() = ComposePixelScene((320f * density).roundToInt(), (140f * density).roundToInt()) {

@@ -201,7 +201,7 @@ class SettingsPrivacyCommonOptionsUiTest {
         moveTo(rect.center.x, rect.center.y); pressAt(rect.center.x, rect.center.y); releaseAt(rect.center.x, rect.center.y)
     }
     private fun ComposePixelScene.replace(rect: Rect, text: String) {
-        click(rect); settledFrame(2, 16); keyStroke(KeyEvent.VK_A, control = true); settledFrame(2, 16)
+        click(rect); settledFrame(2, 16); selectAll(); settledFrame(2, 16)
         keyStroke(KeyEvent.VK_BACK_SPACE); settledFrame(2, 16)
         text.forEach { keyStroke(KeyEvent.getExtendedKeyCodeForChar(it.code), it); settledFrame(1, 16) }
         settledFrame(3, 16)

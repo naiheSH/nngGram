@@ -84,8 +84,14 @@ class ForwardedMessageHeaderRenderTest {
                     "Forward source names must never widen a bubble beyond the narrow viewport.")
                 assertContained(header, bubble, density)
                 assertContained(body, bubble, density)
-                assertTrue(header.height > 18f * density && header.height <= 37f * density + 1f,
-                    "A long source uses at most two 18sp lines: density=$density, bounds=$header.")
+                val layouts = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
+                scene.unmergedSemanticsBounds {
+                    if (it.getOrNull(SemanticsProperties.Text).orEmpty().any { value -> value.text == "转发自 $name" })
+                        it.getOrNull(SemanticsActions.GetTextLayoutResult)?.action?.invoke(layouts)
+                    false
+                }
+                assertEquals(2, layouts.single().lineCount,
+                    "A long source uses two lines with the host's actual Chinese/emoji font metrics.")
                 assertTrue(body.top >= header.bottom + 4f * density,
                     "The header must reserve actual text height before the message body.")
                 save(frame, "narrow-${if (dark) "dark" else "light"}-$density")

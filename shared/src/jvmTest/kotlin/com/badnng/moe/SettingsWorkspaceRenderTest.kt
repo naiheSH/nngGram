@@ -261,7 +261,7 @@ class SettingsWorkspaceRenderTest {
                 it.getOrNull(SemanticsProperties.EditableText)?.text == syntheticFirstName &&
                     it.getOrNull(SemanticsProperties.Focused) == true
             }.size, "Pointer input must focus the actual field before typing: ${scene.editableState()}")
-            scene.keyStroke(KeyEvent.VK_A, control = true)
+            scene.selectAll()
             scene.settledFrame(2, 16)
             scene.keyStroke(KeyEvent.VK_BACK_SPACE)
             scene.settledFrame(2, 16)

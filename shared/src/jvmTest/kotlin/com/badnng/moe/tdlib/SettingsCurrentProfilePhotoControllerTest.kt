@@ -115,7 +115,10 @@ class SettingsCurrentProfilePhotoControllerTest {
         val readyLease = f.acquire(f.request(epoch)); f.session.files[0].result(SettingsResult(staticReady)); f.drain()
         f.acquire(f.request(epoch)); val pending = f.session.files[1]
         f.controller.removePhoto(f.token, 11)
-        f.session.removals.single()(SettingsResult(Unit)); assertFalse(readyLease.active()); f.drain()
+        SettingsSpecialMutationContext.withReceipt(SettingsSpecialWriteReceipt(SettingsSpecialWriteOutcome.ACCEPTED)) {
+            f.session.removals.single()(SettingsResult(Unit))
+        }
+        assertFalse(readyLease.active()); f.drain()
         assertEquals(epoch, f.snapshot.currentPhoto.epoch)
         assertEquals(SettingsCurrentProfilePhotoStatus.CONFLICT, f.snapshot.currentPhoto.status)
         assertEquals(1, f.session.files[0].closes); assertEquals(1, pending.closes); assertFalse(pending.active())

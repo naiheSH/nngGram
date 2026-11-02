@@ -12,6 +12,7 @@ import kotlin.test.*
 
 class WindowsToastAbiTest {
     @Test fun factoryCreatesAndInvokesTheActivationAndLockCallbacksThroughNativeFakeVtables() {
+        org.junit.Assume.assumeTrue("Windows COM stdcall callback trampoline", com.sun.jna.Platform.isWindows())
         WindowsToastNativeSmoke.factoryCallbacks()
     }
 
@@ -27,10 +28,12 @@ class WindowsToastAbiTest {
     }
 
     @Test fun callbackVtablesRoundTripIUnknownAndTheNativeInvokeWithoutAnOsBackend() {
+        org.junit.Assume.assumeTrue("Windows COM stdcall callback trampoline", com.sun.jna.Platform.isWindows())
         WindowsToastNativeSmoke.run()
     }
 
     @Test fun agileMarkerQueriesRetainTheSameIdentityAndUnsupportedInterfacesClearTheOutput() {
+        org.junit.Assume.assumeTrue("Windows COM stdcall callback trampoline", com.sun.jna.Platform.isWindows())
         val callback = WindowsToastComObject(emptySet(), emptyList())
         try {
             val agile = WindowsToastComAbi.query(callback.pointer, WindowsToastComAbi.IAGILE_OBJECT)
@@ -47,6 +50,7 @@ class WindowsToastAbiTest {
     }
 
     @Test fun aFactoryThatCapturedAnActivatorBeforeCloseCannotReviveItsZeroReferenceCount() {
+        org.junit.Assume.assumeTrue("Windows COM stdcall callback trampoline", com.sun.jna.Platform.isWindows())
         val activator = WindowsToastComObject(setOf(WindowsToastComAbi.ACTIVATION_CALLBACK), emptyList())
         val captured = CountDownLatch(1)
         val continueQuery = CountDownLatch(1)
@@ -79,6 +83,7 @@ class WindowsToastAbiTest {
     }
 
     @Test fun aQueryThatRetainsFirstKeepsTheCallbackAliveUntilItsNativeReferenceIsReleased() {
+        org.junit.Assume.assumeTrue("Windows COM stdcall callback trampoline", com.sun.jna.Platform.isWindows())
         val callback = WindowsToastComObject(emptySet(), emptyList())
         val retained = WindowsToastComAbi.query(callback.pointer, WindowsToastComAbi.IUNKNOWN)
         callback.releaseOwner()

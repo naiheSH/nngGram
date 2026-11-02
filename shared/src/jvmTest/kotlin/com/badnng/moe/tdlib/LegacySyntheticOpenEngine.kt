@@ -18,7 +18,8 @@ internal fun syntheticOpenEngine(
     dispatcher: CoroutineDispatcher,
     journal: SafeEventJournal = SafeEventJournal.besideConfiguration(configuration.path),
     nowMillis: () -> Long = System::currentTimeMillis,
-): TdEngine = TdEngine(configuration, transport, dispatcher, journal, nowMillis).also { engine ->
+    saveTargetRegistry: com.badnng.moe.media.NativeSaveTargetRegistry = com.badnng.moe.media.NativeSaveTargets.registry,
+): TdEngine = TdEngine(configuration, transport, dispatcher, journal, nowMillis, saveTargetRegistry = saveTargetRegistry).also { engine ->
     engine.localLockCoordinatorFactory = { root, worker, start, changed ->
         LocalLockCoordinator(root, worker, start, onWitnessChanged = changed,
             persistence = SyntheticOpenPersistence(), preferences = SyntheticOpenPreferences)

@@ -1,4 +1,4 @@
-name: Windows CI
+name: Desktop CI
 on:
   push:
     branches: ['**', '!dependabot/**']
@@ -11,42 +11,76 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   checks:
-    name: Secretless Windows JVM checks
-    runs-on: windows-2022
+    name: ${{ matrix.profile }} business/UI tests and preview package
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { runner: windows-2022, profile: windows-x64 }
+          - { runner: macos-15, profile: macos-arm64 }
+          - { runner: macos-15-intel, profile: macos-x64 }
+          - { runner: ubuntu-24.04, profile: linux-x64 }
+          - { runner: ubuntu-24.04-arm, profile: linux-arm64 }
     timeout-minutes: 150
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
       - name: Isolate Gradle user home
-        shell: pwsh
-        run: '"GRADLE_USER_HOME=$env:RUNNER_TEMP/gradle-checks" >> $env:GITHUB_ENV'
+        shell: bash
+        run: echo "GRADLE_USER_HOME=$RUNNER_TEMP/gradle-checks" >> "$GITHUB_ENV"
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: '3.12'
       - name: Offline CI regression tests
         run: python -B -m unittest discover -s .github/scripts -p 'test_*.py'
       - name: Offline installer and ZIP contracts
+        if: runner.os == 'Windows'
         shell: pwsh
         run: ./scripts/test-windows-installer.ps1
       - uses: ./.github/actions/prepare-native
+        with:
+          runner-image: ${{ matrix.runner }}
       - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
         with:
           cache-read-only: ${{ github.event_name == 'pull_request' || github.ref_name != github.event.repository.default_branch }}
-      - name: Assemble and run JVM tests without application credentials
+      - name: Prepare Windows installer tools
+        if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          @'
-          gradle.beforeProject { project ->
-              project.layout.buildDirectory.set(new File(project.projectDir, 'build/ci-checks'))
-          }
-          '@ | Set-Content "$env:RUNNER_TEMP/ci-checks.init.gradle"
-          ./gradlew.bat :desktopApp:assemble :desktopApp:test :shared:jvmTest --project-cache-dir build/ci-checks-gradle-cache --init-script "$env:RUNNER_TEMP/ci-checks.init.gradle" --no-configuration-cache --no-build-cache --console=plain --max-workers=2
-          if ($LASTEXITCODE -ne 0) { throw 'JVM checks failed.' }
+          ./.github/scripts/prepare-wix-ci.ps1
+          "$env:RUNNER_TEMP/wix311" >> $env:GITHUB_PATH
+      - name: Run portable business and UI regressions, then package
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = Linux ]; then
+            xvfb-run -a python scripts/desktop.py build --installer
+          else
+            python scripts/desktop.py build --installer
+          fi
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: preview-${{ matrix.profile }}-${{ github.run_id }}
+          path: build/distributions/${{ matrix.profile }}/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+      - name: Upload test evidence even after failure
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: tests-${{ matrix.profile }}-${{ github.run_id }}
+          path: |
+            desktopApp/build/reports/tests/
+            shared/build/reports/tests/
+          if-no-files-found: warn
+          retention-days: 14
   native:
     name: Trusted Windows native distribution
     needs: checks
     if: >-
+      vars.ENABLE_WINDOWS_NATIVE == 'true' &&
       vars.DISTRIBUTION_REPOSITORY != '' && github.repository == vars.DISTRIBUTION_REPOSITORY &&
       github.event_name != 'pull_request' &&
       (github.ref_name == github.event.repository.default_branch || github.ref == 'refs/heads/dev')
@@ -118,6 +152,61 @@ jobs:
             build/ci-package/SHA256SUMS.txt
             build/ci-package/build-info.json
             build/ci-package/payload-sha256.json
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+  distributions:
+    name: Trusted ${{ matrix.profile }} distribution
+    needs: checks
+    if: >-
+      vars.DISTRIBUTION_REPOSITORY != '' && github.repository == vars.DISTRIBUTION_REPOSITORY &&
+      github.event_name != 'pull_request' &&
+      (github.ref_name == github.event.repository.default_branch || github.ref == 'refs/heads/dev')
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { runner: windows-2022, profile: windows-x64 }
+          - { runner: macos-15, profile: macos-arm64 }
+          - { runner: macos-15-intel, profile: macos-x64 }
+          - { runner: ubuntu-24.04, profile: linux-x64 }
+          - { runner: ubuntu-24.04-arm, profile: linux-arm64 }
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+      - uses: ./.github/actions/prepare-native
+        with:
+          runner-image: ${{ matrix.runner }}
+      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
+        with:
+          cache-disabled: true
+      - name: Prepare Windows installer tools
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          ./.github/scripts/prepare-wix-ci.ps1
+          "$env:RUNNER_TEMP/wix311" >> $env:GITHUB_PATH
+      - name: Build and verify distribution with builder-owned identity
+        shell: bash
+        env:
+          NNGGRAM_API_ID: ${{ secrets.NNGGRAM_API_ID }}
+          NNGGRAM_API_HASH: ${{ secrets.NNGGRAM_API_HASH }}
+        run: |
+          if [ "$RUNNER_OS" = Linux ]; then
+            xvfb-run -a python scripts/desktop.py build --release --installer --skip-tests
+          else
+            python scripts/desktop.py build --release --installer --skip-tests
+          fi
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: nngGram-${{ matrix.profile }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: build/distributions/${{ matrix.profile }}/
           if-no-files-found: error
           compression-level: 0
           retention-days: 14

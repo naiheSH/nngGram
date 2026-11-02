@@ -34,8 +34,9 @@ function New-SyntheticPayload([string]$name) {
     }
     $jarHash = (Get-FileHash -LiteralPath (Join-Path $root 'tdlib.jar') -Algorithm SHA256).Hash.ToLowerInvariant()
     $jniHash = (Get-FileHash -LiteralPath (Join-Path $root 'tdjni.dll') -Algorithm SHA256).Hash.ToLowerInvariant()
+    $pin = ConvertFrom-StringData (Get-Content -LiteralPath (Join-Path $workspace 'native/tdlib-source.properties') -Raw)
     [IO.File]::WriteAllLines((Join-Path $root 'manifest.properties'), @('format=1',
-        'source.commit=9d92b49bc5d0d2e29fe518239af647a88f8680e6', 'architecture=x64', 'binding=official-java-jni',
+        "source.commit=$($pin.commit)", 'architecture=x64', 'binding=official-java-jni',
         'load.order=tdjni.dll', "sha256.tdlib.jar=$jarHash", "sha256.tdjni.dll=$jniHash"))
     return $root
 }

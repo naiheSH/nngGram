@@ -19,7 +19,7 @@ class AutoMediaSaveTargetBoundaryTest {
     private class Crash : Error()
 
     @Test fun forbiddenPreparationCreatesNeitherACopyNorAJournalAndKeepsTheSource() = fixture { f ->
-        val result = AutoMediaCopyJournal().copy(f.request.copy(destination = f.files.resolve("copies")), f.guard(), { true }, { true })
+        val result = AutoMediaCopyJournal(PortableAutoMediaCopyIo).copy(f.request.copy(destination = f.files.resolve("copies")), f.guard(), { true }, { true })
         assertEquals(AutoMediaCopyResult.Failed(AutoMediaCopyIssue.TARGET_UNSAFE), result)
         assertFalse(Files.exists(f.files.resolve("copies")))
         assertFalse(Files.exists(f.journalRoot))
@@ -27,37 +27,37 @@ class AutoMediaSaveTargetBoundaryTest {
     }
 
     @Test fun preparedRecoveryRefusalPreservesTheExactIntentStageSourceAndJournal() = fixture { f ->
-        val crashIo = object : AutoMediaCopyIo by NioAutoMediaCopyIo {
+        val crashIo = object : AutoMediaCopyIo by PortableAutoMediaCopyIo {
             override fun writeJournalAtomically(path: Path, record: AutoMediaCopyRecord) {
-                NioAutoMediaCopyIo.writeJournalAtomically(path, record)
+                PortableAutoMediaCopyIo.writeJournalAtomically(path, record)
                 if (record.state == AutoMediaCopyState.PREPARED) throw Crash()
             }
         }
         assertFailsWith<Crash> { AutoMediaCopyJournal(crashIo).copy(f.request, f.guard(), { true }, { true }) }
         val path = f.journal()
         val before = Files.readAllBytes(path)
-        val record = assertNotNull(NioAutoMediaCopyIo.loadJournal(path))
+        val record = assertNotNull(PortableAutoMediaCopyIo.loadJournal(path))
         assertEquals(AutoMediaCopyState.PREPARED, record.state)
         f.redirectFilesToOutput = true
         assertEquals(AutoMediaCopyResult.Failed(AutoMediaCopyIssue.TARGET_UNSAFE),
-            AutoMediaCopyJournal().copy(f.request, f.guard(), { true }, { true }))
+            AutoMediaCopyJournal(PortableAutoMediaCopyIo).copy(f.request, f.guard(), { true }, { true }))
         assertContentEquals(before, Files.readAllBytes(path))
         assertTrue(Files.exists(record.stage))
         assertFalse(Files.exists(record.target))
         assertEquals("native bytes", Files.readString(f.source))
         f.redirectFilesToOutput = false
-        val restored = assertIs<AutoMediaCopyResult.Saved>(AutoMediaCopyJournal().copy(f.request, f.guard(), { true }, { true }))
+        val restored = assertIs<AutoMediaCopyResult.Saved>(AutoMediaCopyJournal(PortableAutoMediaCopyIo).copy(f.request, f.guard(), { true }, { true }))
         assertEquals(record.target, restored.path)
-        val committed = assertNotNull(NioAutoMediaCopyIo.loadJournal(path))
+        val committed = assertNotNull(PortableAutoMediaCopyIo.loadJournal(path))
         assertEquals(record.intent, committed.intent)
         assertEquals(record.stageIdentity, committed.stageIdentity)
         assertEquals(AutoMediaCopyState.COMMITTED, committed.state)
     }
 
     @Test fun forbiddenFinalJournalCommitLeavesPreparedIdentityAndTheAlreadyPublishedCopy() = fixture { f ->
-        val io = object : AutoMediaCopyIo by NioAutoMediaCopyIo {
+        val io = object : AutoMediaCopyIo by PortableAutoMediaCopyIo {
             override fun commitNoReplace(stage: Path, target: Path, active: () -> Boolean): String? {
-                val identity = NioAutoMediaCopyIo.commitNoReplace(stage, target, active)
+                val identity = PortableAutoMediaCopyIo.commitNoReplace(stage, target, active)
                 f.redirectFilesToOutput = true
                 return identity
             }
@@ -66,33 +66,33 @@ class AutoMediaSaveTargetBoundaryTest {
         assertEquals(AutoMediaCopyIssue.TARGET_UNSAFE, result.issue)
         assertTrue(result.publicFileMayExist)
         val path = f.journal()
-        val prepared = assertNotNull(NioAutoMediaCopyIo.loadJournal(path))
+        val prepared = assertNotNull(PortableAutoMediaCopyIo.loadJournal(path))
         assertEquals(AutoMediaCopyState.PREPARED, prepared.state)
         assertTrue(Files.exists(prepared.stage))
         assertEquals("native bytes", Files.readString(prepared.target))
         assertEquals("native bytes", Files.readString(f.source))
         f.redirectFilesToOutput = false
-        val recovered = assertIs<AutoMediaCopyResult.Saved>(AutoMediaCopyJournal().copy(f.request, f.guard(), { true }, { true }))
+        val recovered = assertIs<AutoMediaCopyResult.Saved>(AutoMediaCopyJournal(PortableAutoMediaCopyIo).copy(f.request, f.guard(), { true }, { true }))
         assertEquals(prepared.target, recovered.path)
-        assertEquals(prepared.intent, NioAutoMediaCopyIo.loadJournal(path)!!.intent)
+        assertEquals(prepared.intent, PortableAutoMediaCopyIo.loadJournal(path)!!.intent)
         Files.list(f.output).use { assertEquals(1L, it.count()) }
     }
 
     @Test fun unknownRootsAndGenerationChangeNeverReauthorizePreparedPublicWrites() = fixture { f ->
         val unknown = f.registry.registerUnknown(2)
         assertEquals(AutoMediaCopyResult.Failed(AutoMediaCopyIssue.TARGET_UNKNOWN),
-            AutoMediaCopyJournal().copy(f.request, f.guard(), { true }, { true }))
+            AutoMediaCopyJournal(PortableAutoMediaCopyIo).copy(f.request, f.guard(), { true }, { true }))
         assertFalse(Files.exists(f.output))
         unknown.confirmedClosed()
         val guard = f.guard()
         var next: NativeSaveTargetRegistry.Registration? = null
-        val stopped = AutoMediaCopyJournal().copy(f.request, guard, { true }, {
+        val stopped = AutoMediaCopyJournal(PortableAutoMediaCopyIo).copy(f.request, guard, { true }, {
             next = f.registry.registerUnknown(3)
             true
         })
         assertIs<AutoMediaCopyResult.Pending>(stopped)
         assertEquals(AutoMediaCopyIssue.TARGET_UNKNOWN, stopped.issue)
-        val record = NioAutoMediaCopyIo.loadJournal(f.journal())!!
+        val record = PortableAutoMediaCopyIo.loadJournal(f.journal())!!
         assertEquals(AutoMediaCopyState.PREPARED, record.state)
         assertFalse(Files.exists(record.target))
         assertTrue(Files.exists(record.stage))
@@ -101,9 +101,9 @@ class AutoMediaSaveTargetBoundaryTest {
     }
 
     @Test fun forbiddenCleanupKeepsTheCommittedJournalAndBothOwnedFilesForLaterRecovery() = fixture { f ->
-        val io = object : AutoMediaCopyIo by NioAutoMediaCopyIo {
+        val io = object : AutoMediaCopyIo by PortableAutoMediaCopyIo {
             override fun writeJournalAtomically(path: Path, record: AutoMediaCopyRecord) {
-                NioAutoMediaCopyIo.writeJournalAtomically(path, record)
+                PortableAutoMediaCopyIo.writeJournalAtomically(path, record)
                 if (record.state == AutoMediaCopyState.COMMITTED) f.redirectFilesToOutput = true
             }
         }
@@ -111,7 +111,7 @@ class AutoMediaSaveTargetBoundaryTest {
         assertEquals(AutoMediaCopyIssue.RECOVERY_AMBIGUOUS, stopped.issue)
         assertTrue(stopped.publicFileMayExist)
         val path = f.journal()
-        val record = assertNotNull(NioAutoMediaCopyIo.loadJournal(path))
+        val record = assertNotNull(PortableAutoMediaCopyIo.loadJournal(path))
         val before = Files.readAllBytes(path)
         assertEquals(AutoMediaCopyState.COMMITTED, record.state)
         assertTrue(Files.exists(record.stage))
@@ -119,18 +119,18 @@ class AutoMediaSaveTargetBoundaryTest {
         assertEquals("native bytes", Files.readString(f.source))
         assertContentEquals(before, Files.readAllBytes(path))
         f.redirectFilesToOutput = false
-        val recovered = assertIs<AutoMediaCopyResult.Saved>(AutoMediaCopyJournal().copy(f.request, f.guard(), { true }, { true }))
+        val recovered = assertIs<AutoMediaCopyResult.Saved>(AutoMediaCopyJournal(PortableAutoMediaCopyIo).copy(f.request, f.guard(), { true }, { true }))
         assertTrue(recovered.alreadyPresent)
         assertEquals(record.target, recovered.path)
-        assertEquals(record.intent, NioAutoMediaCopyIo.loadJournal(path)!!.intent)
+        assertEquals(record.intent, PortableAutoMediaCopyIo.loadJournal(path)!!.intent)
         assertFalse(Files.exists(record.stage))
     }
 
     @Test fun registrationChangeDuringPublicationKeepsPreparedIdentityAndThePossiblePublicFile() = fixture { f ->
         var newClient: NativeSaveTargetRegistry.Registration? = null
-        val io = object : AutoMediaCopyIo by NioAutoMediaCopyIo {
+        val io = object : AutoMediaCopyIo by PortableAutoMediaCopyIo {
             override fun commitNoReplace(stage: Path, target: Path, active: () -> Boolean): String? {
-                val identity = NioAutoMediaCopyIo.commitNoReplace(stage, target, active)
+                val identity = PortableAutoMediaCopyIo.commitNoReplace(stage, target, active)
                 newClient = f.registry.registerUnknown(8)
                 return identity
             }
@@ -139,7 +139,7 @@ class AutoMediaSaveTargetBoundaryTest {
         assertEquals(AutoMediaCopyIssue.TARGET_UNKNOWN, stopped.issue)
         assertTrue(stopped.publicFileMayExist)
         val path = f.journal()
-        val prepared = assertNotNull(NioAutoMediaCopyIo.loadJournal(path))
+        val prepared = assertNotNull(PortableAutoMediaCopyIo.loadJournal(path))
         val bytes = Files.readAllBytes(path)
         assertEquals(AutoMediaCopyState.PREPARED, prepared.state)
         assertEquals("native bytes", Files.readString(prepared.target))
@@ -147,17 +147,17 @@ class AutoMediaSaveTargetBoundaryTest {
         assertEquals("native bytes", Files.readString(f.source))
         assertContentEquals(bytes, Files.readAllBytes(path))
         newClient!!.confirmedClosed()
-        val recovered = assertIs<AutoMediaCopyResult.Saved>(AutoMediaCopyJournal().copy(f.request, f.guard(), { true }, { true }))
+        val recovered = assertIs<AutoMediaCopyResult.Saved>(AutoMediaCopyJournal(PortableAutoMediaCopyIo).copy(f.request, f.guard(), { true }, { true }))
         assertEquals(prepared.target, recovered.path)
-        assertEquals(prepared.intent, NioAutoMediaCopyIo.loadJournal(path)!!.intent)
+        assertEquals(prepared.intent, PortableAutoMediaCopyIo.loadJournal(path)!!.intent)
         Files.list(f.output).use { assertEquals(1L, it.count()) }
     }
 
     @Test fun identityReadFailureAfterPublicationAndEpochChangeRemainsPendingWithOriginalIntent() = fixture { f ->
         var newClient: NativeSaveTargetRegistry.Registration? = null
-        val io = object : AutoMediaCopyIo by NioAutoMediaCopyIo {
+        val io = object : AutoMediaCopyIo by PortableAutoMediaCopyIo {
             override fun commitNoReplace(stage: Path, target: Path, active: () -> Boolean): String? {
-                NioAutoMediaCopyIo.commitNoReplace(stage, target, active)
+                PortableAutoMediaCopyIo.commitNoReplace(stage, target, active)
                 newClient = f.registry.registerUnknown(10)
                 throw IOException("synthetic identity read failed after publication")
             }
@@ -167,39 +167,39 @@ class AutoMediaSaveTargetBoundaryTest {
         assertTrue(stopped.publicFileMayExist)
         assertEquals(AutoMediaCopyNotice.RECOVERY_AMBIGUOUS, autoMediaCopyNotice(stopped))
         val path = f.journal()
-        val prepared = assertNotNull(NioAutoMediaCopyIo.loadJournal(path))
+        val prepared = assertNotNull(PortableAutoMediaCopyIo.loadJournal(path))
         assertEquals(AutoMediaCopyState.PREPARED, prepared.state)
         assertEquals("native bytes", Files.readString(prepared.target))
         assertTrue(Files.isSameFile(prepared.stage, prepared.target))
         assertEquals("native bytes", Files.readString(f.source))
         newClient!!.confirmedClosed()
-        val recovered = assertIs<AutoMediaCopyResult.Saved>(AutoMediaCopyJournal().copy(f.request, f.guard(), { true }, { true }))
+        val recovered = assertIs<AutoMediaCopyResult.Saved>(AutoMediaCopyJournal(PortableAutoMediaCopyIo).copy(f.request, f.guard(), { true }, { true }))
         assertEquals(prepared.target, recovered.path)
-        assertEquals(prepared.intent, NioAutoMediaCopyIo.loadJournal(path)!!.intent)
+        assertEquals(prepared.intent, PortableAutoMediaCopyIo.loadJournal(path)!!.intent)
         Files.list(f.output).use { assertEquals(1L, it.count()) }
     }
 
     @Test fun aCollisionExceptionAfterPublicationIsNotMistakenForAnUnpublishedCollision() = fixture { f ->
-        val io = object : AutoMediaCopyIo by NioAutoMediaCopyIo {
+        val io = object : AutoMediaCopyIo by PortableAutoMediaCopyIo {
             override fun commitNoReplace(stage: Path, target: Path, active: () -> Boolean): String? {
-                NioAutoMediaCopyIo.commitNoReplace(stage, target, active)
+                PortableAutoMediaCopyIo.commitNoReplace(stage, target, active)
                 throw FileAlreadyExistsException("synthetic post-publication failure")
             }
         }
         val result = assertIs<AutoMediaCopyResult.Pending>(AutoMediaCopyJournal(io).copy(f.request, f.guard(), { true }, { true }))
         assertEquals(AutoMediaCopyIssue.COMMIT_UNAVAILABLE, result.issue)
         assertTrue(result.publicFileMayExist)
-        val record = assertNotNull(NioAutoMediaCopyIo.loadJournal(f.journal()))
+        val record = assertNotNull(PortableAutoMediaCopyIo.loadJournal(f.journal()))
         assertEquals(AutoMediaCopyState.PREPARED, record.state)
         assertEquals("native bytes", Files.readString(record.target))
-        assertIs<AutoMediaCopyResult.Saved>(AutoMediaCopyJournal().copy(f.request, f.guard(), { true }, { true }))
+        assertIs<AutoMediaCopyResult.Saved>(AutoMediaCopyJournal(PortableAutoMediaCopyIo).copy(f.request, f.guard(), { true }, { true }))
         Files.list(f.output).use { assertEquals(1L, it.count()) }
     }
 
     @Test fun identityFailureThenUnsafeResolutionDoesNotEraseThePossiblePublicWrite() = fixture { f ->
-        val io = object : AutoMediaCopyIo by NioAutoMediaCopyIo {
+        val io = object : AutoMediaCopyIo by PortableAutoMediaCopyIo {
             override fun commitNoReplace(stage: Path, target: Path, active: () -> Boolean): String? {
-                NioAutoMediaCopyIo.commitNoReplace(stage, target, active)
+                PortableAutoMediaCopyIo.commitNoReplace(stage, target, active)
                 f.redirectFilesToOutput = true
                 throw IOException("synthetic failure after publication")
             }
@@ -208,20 +208,20 @@ class AutoMediaSaveTargetBoundaryTest {
         assertEquals(AutoMediaCopyIssue.COMMIT_UNAVAILABLE, result.issue)
         assertTrue(result.publicFileMayExist)
         assertEquals(AutoMediaCopyNotice.RECOVERY_AMBIGUOUS, autoMediaCopyNotice(result))
-        val record = assertNotNull(NioAutoMediaCopyIo.loadJournal(f.journal()))
+        val record = assertNotNull(PortableAutoMediaCopyIo.loadJournal(f.journal()))
         assertEquals("native bytes", Files.readString(record.target))
         assertTrue(Files.exists(record.stage))
         f.redirectFilesToOutput = false
-        val restored = assertIs<AutoMediaCopyResult.Saved>(AutoMediaCopyJournal().copy(f.request, f.guard(), { true }, { true }))
+        val restored = assertIs<AutoMediaCopyResult.Saved>(AutoMediaCopyJournal(PortableAutoMediaCopyIo).copy(f.request, f.guard(), { true }, { true }))
         assertEquals(record.target, restored.path)
-        assertEquals(record.intent, NioAutoMediaCopyIo.loadJournal(f.journal())!!.intent)
+        assertEquals(record.intent, PortableAutoMediaCopyIo.loadJournal(f.journal())!!.intent)
     }
 
     @Test fun sourceLeaseCloseFailureAfterPublicationKeepsTheCommittedResultPending() = fixture { f ->
-        val io = object : AutoMediaCopyIo by NioAutoMediaCopyIo {
+        val io = object : AutoMediaCopyIo by PortableAutoMediaCopyIo {
             override fun prepareOwnedCopy(source: Path, destination: Path, nativeSize: Long, slot: AutoMediaStageSlot?,
                 active: () -> Boolean): AutoMediaPreparedCopy {
-                val prepared = NioAutoMediaCopyIo.prepareOwnedCopy(source, destination, nativeSize, slot, active)
+                val prepared = PortableAutoMediaCopyIo.prepareOwnedCopy(source, destination, nativeSize, slot, active)
                 return AutoMediaPreparedCopy(prepared.stage, prepared.identity, prepared.contentHash, prepared.length) {
                     prepared.close()
                     throw IOException("synthetic close failure")
@@ -231,40 +231,40 @@ class AutoMediaSaveTargetBoundaryTest {
         val stopped = assertIs<AutoMediaCopyResult.Pending>(AutoMediaCopyJournal(io).copy(f.request, f.guard(), { true }, { true }))
         assertEquals(AutoMediaCopyIssue.RECOVERY_AMBIGUOUS, stopped.issue)
         assertTrue(stopped.publicFileMayExist)
-        val record = assertNotNull(NioAutoMediaCopyIo.loadJournal(f.journal()))
+        val record = assertNotNull(PortableAutoMediaCopyIo.loadJournal(f.journal()))
         assertEquals(AutoMediaCopyState.COMMITTED, record.state)
         assertEquals("native bytes", Files.readString(record.target))
         assertEquals("native bytes", Files.readString(f.source))
-        val recovered = assertIs<AutoMediaCopyResult.Saved>(AutoMediaCopyJournal().copy(f.request, f.guard(), { true }, { true }))
+        val recovered = assertIs<AutoMediaCopyResult.Saved>(AutoMediaCopyJournal(PortableAutoMediaCopyIo).copy(f.request, f.guard(), { true }, { true }))
         assertEquals(record.target, recovered.path)
         assertTrue(recovered.alreadyPresent)
     }
 
     @Test fun registrationChangeDuringPreparedJournalWriteRetainsItsIntentForExplicitRecovery() = fixture { f ->
         var newClient: NativeSaveTargetRegistry.Registration? = null
-        val io = object : AutoMediaCopyIo by NioAutoMediaCopyIo {
+        val io = object : AutoMediaCopyIo by PortableAutoMediaCopyIo {
             override fun writeJournalAtomically(path: Path, record: AutoMediaCopyRecord) {
-                NioAutoMediaCopyIo.writeJournalAtomically(path, record)
+                PortableAutoMediaCopyIo.writeJournalAtomically(path, record)
                 if (record.state == AutoMediaCopyState.PREPARED) newClient = f.registry.registerUnknown(9)
             }
         }
         assertEquals(AutoMediaCopyResult.Pending(AutoMediaCopyIssue.RECOVERY_AMBIGUOUS),
             AutoMediaCopyJournal(io).copy(f.request, f.guard(), { true }, { true }))
         val path = f.journal()
-        val prepared = assertNotNull(NioAutoMediaCopyIo.loadJournal(path))
+        val prepared = assertNotNull(PortableAutoMediaCopyIo.loadJournal(path))
         assertEquals(AutoMediaCopyState.PREPARED, prepared.state)
         assertFalse(Files.exists(prepared.target))
         assertTrue(Files.exists(prepared.stage))
         newClient!!.confirmedClosed()
-        val recovered = assertIs<AutoMediaCopyResult.Saved>(AutoMediaCopyJournal().copy(f.request, f.guard(), { true }, { true }))
+        val recovered = assertIs<AutoMediaCopyResult.Saved>(AutoMediaCopyJournal(PortableAutoMediaCopyIo).copy(f.request, f.guard(), { true }, { true }))
         assertEquals(prepared.target, recovered.path)
-        assertEquals(prepared.intent, NioAutoMediaCopyIo.loadJournal(path)!!.intent)
+        assertEquals(prepared.intent, PortableAutoMediaCopyIo.loadJournal(path)!!.intent)
         assertEquals("native bytes", Files.readString(f.source))
     }
 
     @Test fun journalDirectoryItselfMustBeOutsideBothKnownRootAliases() = fixture { f ->
         f.redirectDatabaseToAccount = true
-        val result = AutoMediaCopyJournal().copy(f.request, f.guard(), { true }, { true })
+        val result = AutoMediaCopyJournal(PortableAutoMediaCopyIo).copy(f.request, f.guard(), { true }, { true })
         assertEquals(AutoMediaCopyResult.Failed(AutoMediaCopyIssue.TARGET_UNSAFE), result)
         assertFalse(Files.exists(f.journalRoot))
         assertFalse(Files.exists(f.output))

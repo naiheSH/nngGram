@@ -35,7 +35,7 @@ internal fun ComposePixelScene.replaceDeviceNameEditorUsingKeys(field: Rect, rep
     val original = focusedDeviceNameValue(field)
     assertTrue(original.text.isNotEmpty(), "This replacement regression must start with a real existing name")
 
-    keyStroke(KeyEvent.VK_A, control = true)
+    selectAll()
     settledFrame(2, 16)
     val selected = focusedDeviceNameValue(field)
     assertEquals(original.text, selected.text, "Ctrl+A must not alter the existing text")

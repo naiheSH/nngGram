@@ -24,7 +24,7 @@ internal data class VoiceRecordingState(
 
 /** Open only after the user enters recording. Tests inject a PCM source and encoder. */
 internal class VoiceRecordingSession(
-    private val inputFactory: () -> VoicePcmInput = { WinMmPcmInput() },
+    private val inputFactory: () -> VoicePcmInput = DesktopAudio::input,
     private val encode: (Path, Path) -> Unit = VoiceRecordingFiles::encode,
     private val directory: Path = Files.createTempDirectory("nnggram-voice-"),
     private val dispatcher: CoroutineDispatcher = Dispatchers.IO,
@@ -65,7 +65,7 @@ internal class VoiceRecordingSession(
         inputFactory().use { input ->
             val startedAt = nowNanos()
             Files.newOutputStream(pcm).use { output ->
-                val block = ByteArray(WinMmPcmInput.BLOCK_BYTES)
+                val block = ByteArray(DesktopAudio.VOICE_BLOCK_BYTES)
                 var stopped = false
                 while (sampleCount < MAX_SAMPLES && nowNanos() - startedAt < 300_000_000_000L) {
                     if (Thread.currentThread().isInterrupted || closed.get()) throw InterruptedException()

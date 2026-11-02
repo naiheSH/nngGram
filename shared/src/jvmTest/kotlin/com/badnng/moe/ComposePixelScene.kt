@@ -1,3 +1,5 @@
+@file:Suppress("INVISIBLE_REFERENCE", "INVISIBLE_MEMBER")
+
 package com.badnng.moe
 
 import androidx.compose.runtime.Composable
@@ -33,7 +35,14 @@ internal class ComposePixelScene(
         }
     }
     private val scene = try {
-        onEventThread { ImageComposeScene(width, height, content = content) }
+        onEventThread { ImageComposeScene(width, height) {
+            // Synthetic wheel units are viewport twentieths on every host. Native
+            // Cocoa/WinUI/GNOME wheel acceleration belongs to platform integration tests.
+            androidx.compose.runtime.CompositionLocalProvider(
+                androidx.compose.foundation.gestures.LocalScrollConfig provides PortableSceneWheel,
+                content = content,
+            )
+        } }
     } catch (error: Throwable) {
         onEventThread { Thread.currentThread().uncaughtExceptionHandler = previousHandler }
         throw error
@@ -55,11 +64,12 @@ internal class ComposePixelScene(
 
     /** Keys stay inside the in-memory scene; no system keyboard input is generated. */
     fun keyStroke(code: Int, character: Char = java.awt.event.KeyEvent.CHAR_UNDEFINED, control: Boolean = false,
-        shift: Boolean = false) = onEventThread {
+        shift: Boolean = false, meta: Boolean = false) = onEventThread {
         checkAsynchronousFailure()
         val source = object : java.awt.Component() {}
         val modifiers = (if (control) java.awt.event.InputEvent.CTRL_DOWN_MASK else 0) or
-            (if (shift) java.awt.event.InputEvent.SHIFT_DOWN_MASK else 0)
+            (if (shift) java.awt.event.InputEvent.SHIFT_DOWN_MASK else 0) or
+            (if (meta) java.awt.event.InputEvent.META_DOWN_MASK else 0)
         fun send(type: Int, keyCode: Int, char: Char) {
             val nativeEvent = java.awt.event.KeyEvent(source, type,
                 timeNanos / 1_000_000, modifiers, keyCode, char)
@@ -70,17 +80,27 @@ internal class ComposePixelScene(
                     java.awt.event.KeyEvent.KEY_RELEASED -> androidx.compose.ui.input.key.KeyEventType.KeyUp
                     else -> androidx.compose.ui.input.key.KeyEventType.Unknown
                 },
-                codePoint = char.code, isCtrlPressed = control, isShiftPressed = shift, nativeEvent = nativeEvent,
+                codePoint = char.code, isCtrlPressed = control, isMetaPressed = meta, isShiftPressed = shift, nativeEvent = nativeEvent,
             ))
         }
         send(java.awt.event.KeyEvent.KEY_PRESSED, code, character)
-        if (character != java.awt.event.KeyEvent.CHAR_UNDEFINED && !control)
+        if (character != java.awt.event.KeyEvent.CHAR_UNDEFINED && !control && !meta)
             send(java.awt.event.KeyEvent.KEY_TYPED, java.awt.event.KeyEvent.VK_UNDEFINED, character)
         send(java.awt.event.KeyEvent.KEY_RELEASED, code, character)
     }
 
-    fun scrollAt(x: Float, y: Float, deltaX: Float = 0f, deltaY: Float = 0f) =
+    fun selectAll() = shortcut(java.awt.event.KeyEvent.VK_A)
+
+    fun shortcut(code: Int) = keyStroke(code,
+        control = !com.badnng.moe.platform.DesktopPlatform.current.isMacOS,
+        meta = com.badnng.moe.platform.DesktopPlatform.current.isMacOS)
+
+    fun scrollAt(x: Float, y: Float, deltaX: Float = 0f, deltaY: Float = 0f) {
+        // A physical wheel acts under the actual pointer. Update the scene hit path
+        // first, including after composition has replaced the last clicked control.
+        moveTo(x, y)
         pointer(PointerEventType.Scroll, x, y, scrollDelta = Offset(deltaX, deltaY))
+    }
 
     /** Resolve current layout on the UI thread; no live semantics/layout nodes escape the scene. */
     fun semanticsBounds(predicate: (SemanticsConfiguration) -> Boolean): List<Rect> = nodeBounds(false, predicate)
@@ -88,10 +108,17 @@ internal class ComposePixelScene(
     /** Inspect actual child image nodes when a clickable surface merges their accessibility data. */
     fun unmergedSemanticsBounds(predicate: (SemanticsConfiguration) -> Boolean): List<Rect> = nodeBounds(true, predicate)
 
-    private fun nodeBounds(unmerged: Boolean, predicate: (SemanticsConfiguration) -> Boolean): List<Rect> = onEventThread {
+    /** Visible list snapshots exclude unplaced prefetched nodes; state queries may still inspect them. */
+    fun placedSemanticsBounds(predicate: (SemanticsConfiguration) -> Boolean): List<Rect> = nodeBounds(false, predicate, placedOnly = true)
+
+    private fun nodeBounds(unmerged: Boolean, predicate: (SemanticsConfiguration) -> Boolean,
+        placedOnly: Boolean = false): List<Rect> = onEventThread {
         checkAsynchronousFailure()
         buildList {
             fun visit(node: SemanticsNode) {
+                // Lazy layouts may retain prefetched/unplaced nodes with old coordinates.
+                // They are not visible hit targets in the current rendered scene.
+                if (placedOnly && (!node.layoutInfo.isAttached || !node.layoutInfo.isPlaced || node.layoutInfo.isDeactivated)) return
                 if (predicate(node.config)) add(node.boundsInRoot)
                 node.children.forEach(::visit)
             }
@@ -153,6 +180,17 @@ internal class ComposePixelScene(
 
     private fun checkAsynchronousFailure() {
         asynchronousFailure.get()?.let { throw AssertionError("Compose pixel scene failed on the EDT.", it) }
+    }
+}
+
+private object PortableSceneWheel : androidx.compose.foundation.gestures.ScrollConfig {
+    override val isSmoothScrollingEnabled = true
+    override fun androidx.compose.ui.unit.Density.calculateMouseWheelScroll(
+        event: androidx.compose.ui.input.pointer.PointerEvent,
+        bounds: androidx.compose.ui.unit.IntSize,
+    ): Offset {
+        val delta = event.changes.fold(Offset.Zero) { total, change -> total + change.scrollDelta }
+        return Offset(-delta.x * bounds.width / 20f, -delta.y * bounds.height / 20f)
     }
 }
 

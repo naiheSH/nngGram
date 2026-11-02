@@ -160,22 +160,23 @@ internal object MediaDecoder {
     }
 
     internal fun findFfmpeg(): Path? {
+        val tool = com.badnng.moe.platform.DesktopPlatform.current.executable("ffmpeg")
         val candidates = mutableListOf<Path>()
         System.getProperty("nnggram.ffmpeg.path")?.takeIf(String::isNotBlank)?.let { candidates.add(Path.of(it)) }
         System.getenv("NNGGRAM_FFMPEG_PATH")?.takeIf(String::isNotBlank)?.let { candidates.add(Path.of(it)) }
-        System.getProperty("compose.application.resources.dir")?.let { candidates.add(Path.of(it, "media", "ffmpeg.exe")) }
-        System.getProperty("nnggram.tdlib.dir")?.let { candidates.add(Path.of(it, "media", "ffmpeg.exe")) }
+        System.getProperty("compose.application.resources.dir")?.let { candidates.add(Path.of(it, "media", tool)) }
+        System.getProperty("nnggram.tdlib.dir")?.let { candidates.add(Path.of(it, "media", tool)) }
         if (System.getProperty("org.graalvm.nativeimage.imagecode") == "runtime") {
             ProcessHandle.current().info().command().orElse(null)?.let { executable ->
                 Path.of(executable).toAbsolutePath().parent?.let { directory ->
-                    candidates.add(directory.resolve("media/ffmpeg.exe"))
-                    candidates.add(directory.resolve("resources/media/ffmpeg.exe"))
-                    candidates.add(directory.resolve("app/resources/media/ffmpeg.exe"))
+                    candidates.add(directory.resolve("media/$tool"))
+                    candidates.add(directory.resolve("resources/media/$tool"))
+                    candidates.add(directory.resolve("app/resources/media/$tool"))
                 }
             }
         }
         System.getenv("PATH")?.split(java.io.File.pathSeparator)?.filter(String::isNotBlank)?.forEach {
-            runCatching { candidates.add(Path.of(it, "ffmpeg.exe")) }
+            runCatching { candidates.add(Path.of(it, tool)) }
         }
         return candidates.firstOrNull(Files::isRegularFile)
     }

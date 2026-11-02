@@ -129,10 +129,10 @@ class OfficialTdSessionAuthorizationGateTest {
         val pageLease = ownedAttachmentLease { cleaned++ }
         val nativeLease = assertNotNull(pageLease.retain())
         val results = mutableListOf<SettingsResult<Unit>>()
-        f.settings.saveProfile(SettingsProfileEdit(ProfileField.NAME, "New first")) {
+        f.gate.withSettingsMutation { f.settings.saveProfile(SettingsProfileEdit(ProfileField.NAME, "New first")) {
             nativeLease.release()
             results += it
-        }
+        } }
         val sent = f.last
         assertIs<TdApi.SetName>(sent.command)
         pageLease.release()

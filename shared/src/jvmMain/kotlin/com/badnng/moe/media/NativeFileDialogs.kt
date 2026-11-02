@@ -9,7 +9,7 @@ import io.github.vinceglb.filekit.dialogs.openFilePicker
 import io.github.vinceglb.filekit.dialogs.openFileSaver
 import io.github.vinceglb.filekit.dialogs.openDirectoryPicker
 
-/** The borrowed HWND belongs to the enclosing Tao window; no AWT window is created. */
+/** The borrowed native handle belongs to the enclosing Tao window. */
 val LocalNativeDialogOwner = staticCompositionLocalOf<Long?> { null }
 
 /** An in-memory attachment-picker boundary lets regressions avoid opening a system window. */
@@ -36,5 +36,6 @@ internal suspend fun pickNativeDirectory(owner: Long?): String? = FileKit.openDi
 
 private fun nativeDialogSettings(title: String, owner: Long?) = FileKitDialogSettings(
     title = title,
-    parent = owner?.takeIf { it != 0L }?.let(FileKitDialogParent::windows),
+    parent = owner?.takeIf { it != 0L && System.getProperty("os.name").startsWith("Windows") }
+        ?.let(FileKitDialogParent::windows),
 )

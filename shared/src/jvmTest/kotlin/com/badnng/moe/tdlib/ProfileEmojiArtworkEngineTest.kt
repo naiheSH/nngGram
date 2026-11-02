@@ -200,7 +200,7 @@ class ProfileEmojiArtworkEngineTest {
         val events = mutableListOf<String>()
         val transport = Transport(events)
         val sources = mutableListOf<Source>()
-        val engine = TdEngine(configuration, transport, StandardTestDispatcher(testScheduler))
+        val engine = syntheticOpenEngine(configuration, transport, StandardTestDispatcher(testScheduler))
         engine.profileEmojiArtworkFactory = { Source(it, events).also(sources::add) }
         return Fixture(engine, transport, sources, events)
     }
@@ -243,7 +243,7 @@ class ProfileEmojiArtworkEngineTest {
     }
 
     private class Session(private val authorization: (AuthorizationDetails) -> Unit,
-        val update: (ChatEvent) -> Unit, private val events: MutableList<String>) : TdSession {
+        val update: (ChatEvent) -> Unit, private val events: MutableList<String>) : SyntheticOpenKeySession {
         var ready = false
         val colors = Colors(events)
         val files = EmojiFiles(events)

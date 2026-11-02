@@ -365,7 +365,7 @@ class OfficialTdPrivacyCommonTest {
     }
 
     @Test
-    fun closingOrRetiringAfterNativeSubmissionDoesNotReportLateSuccessOrStartAnyReadback() {
+    fun closingOrRetiringAfterNativeSubmissionKeepsTheRealReceiptWithoutStartingReadback() {
         repeat(2) { mode ->
             repeat(3) { operation ->
                 val f = Fixture()
@@ -391,8 +391,8 @@ class OfficialTdPrivacyCommonTest {
                 pending.respond(TdApi.Ok())
                 pending.respond(TdApi.Ok())
                 pending.fail()
-                assertEquals(SettingsError.NOT_READY, results.single().error)
-                assertNull(results.single().value)
+                assertNull(results.single().error)
+                assertEquals(Unit, results.single().value)
                 assertEquals(count, f.calls.size)
             }
         }

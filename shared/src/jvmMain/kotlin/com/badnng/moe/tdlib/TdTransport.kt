@@ -219,7 +219,12 @@ internal class OfficialTdSession(
         // Already owned resource relinquishment remains available during an authorization change.
         if (request is TdApi.CloseChat || request is TdApi.CancelDownloadFile || authorizationReady())
             send(request, result, failed)
-        else failed()
+        else {
+            val scope = SettingsSpecialMutationContext.scopeFor(request)
+            if (scope != null) SettingsSpecialMutationContext.withDispatchFailure(scope,
+                SettingsSpecialWriteReceipt(SettingsSpecialWriteOutcome.NOT_DISPATCHED, com.badnng.moe.settings.SettingsError.NOT_READY), failed)
+            else failed()
+        }
     }
     private val storageSend: SettingsStorageNativeSend = { request, result, failed ->
         interactionGate.dispatchStorageRequest(request, ::authorizationReady, send, result, failed)

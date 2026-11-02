@@ -825,9 +825,18 @@ class SettingsProfileHistoryAnimationUiTest {
             .firstOrNull { it.width > 0 && it.height >= 8f * f.density && it.top >= top && it.bottom <= bottom }
         repeat(80) {
             target()?.let { click(it); return }
-            scrollAt(anchor.center.x, anchor.center.y, deltaY = 2f * f.density); settledFrame(5, 32)
+            // Nested scrolling may move the outer page too. Resolve the grid's
+            // current visible hit region instead of reusing the first row's old position.
+            val viewport = Rect(0f, top, f.width * f.density, bottom)
+            val grid = semanticsBounds { config ->
+                config.getOrNull(SemanticsProperties.VerticalScrollAxisRange)?.maxValue()?.let { it > 0f } == true
+            }.lastOrNull { it.width > 0 && it.height > 0 && it.overlaps(viewport) }?.intersect(viewport)
+            val hit = grid ?: anchor
+            scrollAt(hit.center.x, hit.center.y, deltaY = 2f * f.density); settledFrame(5, 32)
         }
-        click(assertNotNull(target(), "Pointer scrolling inside the real history grid must expose $label at ${f.width}x${f.height}"))
+        if (target() == null) settledFrame().save("grid-not-reachable-${f.width}x${f.height}-${f.density}")
+        val actual = semanticsBounds { label in it.getOrNull(SemanticsProperties.ContentDescription).orEmpty() }
+        click(assertNotNull(target(), "Pointer scrolling inside the real history grid must expose $label at ${f.width}x${f.height}; viewport=$top..$bottom, anchor=$anchor, actual=$actual"))
     }
     private fun ComposePixelScene.revealFullPreview(f: Fixture) = reveal(f, fullSquare = true) {
         "已选头像动画预览" in it.getOrNull(SemanticsProperties.ContentDescription).orEmpty()

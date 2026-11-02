@@ -354,8 +354,8 @@ internal fun RichTextEditor(value: TextFieldValue, onValueChange: (TextFieldValu
                             if (!it.isFocused) { shortcuts.reset(); pasteShortcuts.reset() }
                         }
                         .onPreviewKeyEvent { event ->
-                            val paste = pasteShortcuts.handle(event.key, event.type, control = event.isCtrlPressed,
-                                shift = event.isShiftPressed, alt = event.isAltPressed || event.isMetaPressed,
+                            val paste = pasteShortcuts.handle(event.key, event.type, control = event.isCtrlPressed || event.isMetaPressed,
+                                shift = event.isShiftPressed, alt = event.isAltPressed,
                                 composing = value.composition != null,
                                 enabled = inlineControls && allowAttachmentPaste && enabled && linkSelection == null && codeSelection == null && requestAttachmentPaste != null,
                                 attachments = { runCatching { clipboardAttachments?.hasAttachments() == true }.getOrDefault(false) })

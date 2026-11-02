@@ -141,7 +141,7 @@ class ProfileStickerAvatarCodecSmokeTest {
                 "-f", "rawvideo", "-pixel_format", "rgba", "-video_size", "8x4", "-framerate", "10", "-i", raw.toString(),
                 "-f", "lavfi", "-i", "anullsrc=channel_layout=mono:sample_rate=48000:duration=2",
                 "-map", "0:v:0", "-map", "1:a:0",
-                "-vf", "setpts=if(eq(N\\,0)\\,0\\,if(eq(N\\,1)\\,0.1\\,0.4))/TB", "-vsync", "0",
+                "-vf", "setpts=if(eq(N\\,0)\\,0\\,if(eq(N\\,1)\\,0.1\\,0.4))/TB", "-fps_mode", "passthrough",
                 "-sn", "-dn", "-c:v", "libvpx-vp9", "-threads", "1", "-lossless", "1", "-lag-in-frames", "0",
                 "-auto-alt-ref", "0", "-pix_fmt", "yuva420p", "-c:a", "libopus", "-t", "2", "-y", video.toString()))
             val probe = binary.resolveSibling(if (binary.fileName.toString().endsWith(".exe", true)) "ffprobe.exe" else "ffprobe")

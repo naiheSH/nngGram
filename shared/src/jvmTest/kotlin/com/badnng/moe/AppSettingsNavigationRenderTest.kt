@@ -589,7 +589,7 @@ class AppSettingsNavigationRenderTest {
 
     private fun ComposePixelScene.labelledRows(prefix: String): Map<String, Rect> {
         val values = mutableListOf<String>()
-        val bounds = semanticsBounds {
+        val bounds = placedSemanticsBounds {
             it.getOrNull(SemanticsProperties.Text).orEmpty().firstOrNull { text -> text.text.startsWith(prefix) }
                 ?.let { text -> values += text.text; true } ?: false
         }
@@ -608,7 +608,7 @@ class AppSettingsNavigationRenderTest {
         settledFrame(2, 16)
         assertEquals(1, focusedEditorValues().size,
             "Pointer input must focus one real editable field before replacement.")
-        keyStroke(KeyEvent.VK_A, control = true)
+        selectAll()
         settledFrame(2, 16)
         keyStroke(KeyEvent.VK_BACK_SPACE)
         settledFrame(2, 16)

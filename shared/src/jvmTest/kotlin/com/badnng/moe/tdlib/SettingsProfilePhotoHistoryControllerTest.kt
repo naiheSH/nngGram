@@ -230,7 +230,9 @@ class SettingsProfilePhotoHistoryControllerTest {
         f.openHistory()
         f.page(rawCount = 1, entries = listOf(f.entry(12, 0)))
         val newHistory = f.history
-        write.done(SettingsResult(Unit))
+        SettingsSpecialMutationContext.withReceipt(SettingsSpecialWriteReceipt(SettingsSpecialWriteOutcome.ACCEPTED)) {
+            write.done(SettingsResult(Unit))
+        }
         assertEquals(newHistory, f.history)
         assertEquals(0L, f.snapshot.acceptedRevision)
         assertEquals(1, f.profileRefreshes)

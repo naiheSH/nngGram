@@ -130,7 +130,7 @@ class SettingsProfileExtrasUiTest {
     }
     private fun ComposePixelScene.replace(bounds: Rect, text: String) {
         click(bounds); settledFrame(2, 16)
-        keyStroke(KeyEvent.VK_A, control = true); settledFrame(2, 16)
+        selectAll(); settledFrame(2, 16)
         keyStroke(KeyEvent.VK_BACK_SPACE); settledFrame(2, 16)
         text.forEach { keyStroke(KeyEvent.getExtendedKeyCodeForChar(it.code), it); settledFrame(1, 16) }
         settledFrame(3, 16)

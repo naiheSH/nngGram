@@ -170,12 +170,13 @@ class SettingsFontUiTest {
     }
 
     private fun ComposePixelScene.reveal(label: String, width: Float, height: Float) {
-        repeat(18) {
+        repeat(48) {
             settledFrame()
             val bounds = texts(label).firstOrNull()
             if (bounds != null && bounds.top >= 0f && bounds.bottom <= height && bounds.height > 0f) return
-            scrollAt(width - 4f, height / 2f, deltaY = 110f)
+            // Bounded steps cannot jump over the whole short viewport.
+            scrollAt(width - 4f, height / 2f, deltaY = 8f)
         }
-        error("$label must be reachable in the narrow settings viewport")
+        error("$label bounds=${texts(label)} must be reachable in the narrow settings viewport")
     }
 }

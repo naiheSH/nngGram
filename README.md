@@ -1,6 +1,6 @@
 # nngGram · 聊天与媒体
 
-Windows x64 / Kotlin Multiplatform / Compose / Miuix `0.9.4-rc01` / Nucleus `2.5.18` + Tao / GraalVM Native Image / 官方 TDLib Java JNI。
+桌面客户端：Windows x64、macOS x64/arm64、Linux x64/arm64。Kotlin Multiplatform / Compose / Miuix `0.9.4-rc01` / Nucleus `2.5.18` + Tao / 官方 TDLib Java JNI。Windows 另有 GraalVM Native Image 与 MSI。Android 不是这个桌面入口。
 
 应用默认显示真实 TDLib 运行状态：校验并加载原生库，读取版本与提交，再读取本地配置、准备数据目录并初始化单个客户端。正式构建已内置应用身份，开始页点击“开始使用”后可提交手机号、验证码和二步验证密码。登录后读取账号已有的聊天文件夹、主列表与归档，可批量阅读历史、回复、编辑、删除和转发消息，收发文本、照片、贴纸、视频和文件，并同步已读状态。视频在聊天区域内播放。引擎、账号授权和网络连接分别订阅并显示，支持本地 SOCKS5 / HTTP 代理、分类诊断、安全事件记录、停止和重启。
 
@@ -8,13 +8,35 @@ Windows x64 / Kotlin Multiplatform / Compose / Miuix `0.9.4-rc01` / Nucleus `2.5
 
 ## 运行
 
+默认入口是 Windows、macOS、Linux 共用的 JVM 桌面程序，分发包自带 Java 运行时。平台、CPU 架构、TDLib 目录、媒体工具名称、剪贴板、音频和本地保护文件提交均按当前主机选择，不再回退到 Windows。Windows Native Image 是可选的专用后端。
+
+先按“从源码构建”准备当前主机的依赖，再执行：
+
+```sh
+# macOS / Linux；Windows 将 python3 换成 python
+python3 scripts/desktop.py check
+python3 scripts/desktop.py build --installer
+# 正式构建要求自己的 Telegram API 身份
+python3 scripts/desktop.py build --release --installer
+```
+
+产物统一位于 `build/distributions/<平台-架构>/`，包括应用压缩包、DMG/MSI/DEB、SHA256 和构建信息。打包后实际运行应用的 TDLib 离线验收及主界面离屏渲染；Mac 还会挂载最终 DMG，校验其中应用的原生初始化和签名。无凭据预览包可以构建和检查界面，不能登录真实账号。Mac 包目前为临时签名，未做 Developer ID 签名和公证；最低系统版本从实际原生依赖读取，不冒充兼容旧版系统。
+
+`check` 默认执行完整桌面模块与共享 JVM 测试，并启用 TDLib/native/media 验收。业务状态测试使用可注入的模拟后端；界面测试统一合成滚轮尺度，并按主机使用 Command/Ctrl 快捷键。依赖真实 Windows API 的集成测试仅在 Windows 执行，其他平台会明确标为跳过；模拟状态测试在所有平台执行。`--full-tests` 保留为兼容参数，完整回归已经是默认行为。
+
+应用图标统一使用 `desktopApp/src/main/resources/branding/` 的纸飞机资源，分别提供 ICNS、ICO、PNG；可在 macOS 用 `swift scripts/generate-app-icons.swift build/app-icons` 重新生成，再将 PNG/ICNS/ICO 复制到资源目录。macOS 的内容界面仍使用 Compose/Miuix，外层 Tao 窗口使用系统红黄绿按钮；这与 JVM 分发或 Windows 可选 Native Image 编译方式无关。全屏时系统会隐藏窗口按钮，移到屏幕顶部可显示。
+
+`./scripts/build-macos.sh [--release]` 是上述通用入口的 Mac 便捷包装，会在缺少本机 TDLib 或媒体包时调用准备脚本。JVM 开发启动为 `./gradlew :desktopApp:run`（Windows 使用 `gradlew.bat`）。
+
+### Windows Native Image 可选入口
+
 先按下方“从源码构建”准备 TDLib、FFmpeg、应用凭据与工具链，然后构建独立原生程序：
 
 ```powershell
 .\scripts\build-desktop-native.ps1 -GraalVm '.\build\toolchains\graalvm-ce-25i3\graalvm-community-25.3.4.1+1.1' -MsvcRoot '.\build\toolchains\msvc-portable' -BuildName rich-stream -RunTests -RequireTelegramApi
 ```
 
-本轮原生产物位于 `desktopApp/build/rich-stream/compose/binaries/main/graalvm-app/nngGram/nngGram.exe`。移动或分发时保留整个 `nngGram` 目录，包括 TDLib、媒体工具及运行依赖；用户无需安装 JVM。这里生成的是应用目录，不是 MSI 安装包。原生构建与自动测试通过不等于真实账号、界面或 GPU 验收通过。
+上述 Windows 命令的原生产物写入 `desktopApp/build/rich-stream/compose/binaries/main/graalvm-app/nngGram/nngGram.exe`。移动或分发时保留整个 `nngGram` 目录，包括 TDLib、媒体工具及运行依赖；用户无需安装 JVM。这里生成的是应用目录，不是 MSI 安装包。原生构建与自动测试通过不等于真实账号、界面或 GPU 验收通过。
 
 JVM 开发启动与单独测试仍可使用：
 
@@ -36,7 +58,7 @@ JVM 开发启动与单独测试仍可使用：
 
 可用 `:desktopApp:run --args='--desktop-main-preview'` 查看默认 1160×840 的显式离线主界面；`--slim` 为 380×840，`--compact` 为 780×600，`--design-size` 为 1494×993，三者互斥，均可附加 `--dark`。该入口只使用合成资料与聊天，不创建账号引擎或读取本地配置。群资料的离线媒体索引包含聊天区尚未显示的合成图片和视频缩略图，支持分类、分页及原消息跳转；样例视频不含可播放文件。合成图片位于自有临时目录，关闭时清理。`--desktop-main-render <绝对路径的新 PNG> [--slim | --compact | --design-size] [--dark]` 使用相同尺寸规则和实际 Compose 布局离屏渲染；默认尺寸还可加 `--info-open` 检查首开资料页。输出目录必须已存在，文件不能已存在。离屏 PNG 用于布局检查，不能代替实际 Tao 窗口的 DPI、字体锐度或中文输入法验收。
 
-IDE 的普通 Gradle 运行与 `hotRun` 均会自动传入项目 `native/windows-x64` 的绝对路径。Hot Reload 会复制绑定 JAR，但不复制其旁边的 DLL，因此不能依赖热重载目录查找原生库。修改 Gradle 配置后，请重新同步 Gradle、正常关闭旧窗口并重新运行；热更新无法替换已启动 JVM 的参数。若设置了 `nnggram.tdlib.dir` 或 `NNGGRAM_TDLIB_DIR`，仍优先使用显式目录。
+IDE 的普通 Gradle 运行与 `hotRun` 均会自动传入项目当前主机对应的 `native/<平台-架构>` 绝对路径。Hot Reload 会复制绑定 JAR，但不复制其旁边的 DLL，因此不能依赖热重载目录查找原生库。修改 Gradle 配置后，请重新同步 Gradle、正常关闭旧窗口并重新运行；热更新无法替换已启动 JVM 的参数。若设置了 `nnggram.tdlib.dir` 或 `NNGGRAM_TDLIB_DIR`，仍优先使用显式目录。
 
 发布包在构建时注入 Telegram 应用身份，开始页无需填写 API。自行构建时复制 `telegram-api.example.properties` 为忽略的 `telegram-api.local.properties` 并在本机填写自己的凭据，或由 CI Secrets 注入 `NNGGRAM_API_ID` / `NNGGRAM_API_HASH`。构建、CI 与安装方法见下文。旧本地凭据配置仍兼容；不要把真实凭据、验证码、会话或数据库提交到仓库。
 
@@ -127,7 +149,13 @@ proxy_password=
 
 ## 从源码构建
 
-需要 Windows x64、PowerShell 7.2+、JDK 21、MSYS2 UCRT64，以及用于 Native Image 的独立 GraalVM、MSVC 和 Windows SDK。Gradle daemon 保持项目指定的 Azul JDK 21。CI 使用的安装步骤可直接查看 [.github/actions/prepare-native/action.yml](.github/actions/prepare-native/action.yml)。
+共同需要 JDK 21、Python 3.9+、Git。原生 TDLib 还需要 CMake、Ninja、gperf、C++ 编译器、OpenSSL 和 zlib。当前支持 Windows x64、macOS x64/arm64、Linux x64/arm64；不能把其他平台的 JAR/动态库混装到当前包。CI 安装步骤见 [.github/actions/prepare-native/action.yml](.github/actions/prepare-native/action.yml)。
+
+macOS 使用 `brew install cmake ninja gperf openssl ffmpeg`，设置 `JAVA_HOME` 为 JDK 21 后运行 `sh scripts/build-tdlib.sh` 和 `sh scripts/prepare-media-macos.sh`。脚本复制依赖、许可证并重写动态库路径，不依赖收件人的 Homebrew 或构建者的 JDK 目录。
+
+Ubuntu 24.04 使用 `sudo apt-get install cmake ninja-build g++ gperf libssl-dev zlib1g-dev ffmpeg`，设置 JDK 21 后运行 `sh scripts/build-tdlib.sh`。Linux 包使用系统 FFmpeg/OpenSSL；DEB 声明运行依赖，使用 tar.gz 的主机需自行安装这些依赖。无显示器的验收需要 `xvfb xauth` 并通过 `xvfb-run -a python3 scripts/desktop.py build --installer` 执行。
+
+Windows 使用 PowerShell 7.2+ 和 MSYS2 UCRT64。只有可选 Native Image 还需要独立 GraalVM、MSVC 和 Windows SDK：
 
 1. 在 MSYS2 UCRT64 安装 `git gperf mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-cmake mingw-w64-ucrt-x86_64-ninja mingw-w64-ucrt-x86_64-openssl mingw-w64-ucrt-x86_64-zlib`。
 2. 运行 `./scripts/build-tdlib.ps1 -MsysRoot 'MSYS2目录' -Jdk 'JDK21目录'`，从官方固定提交构建完整 Java/JNI 绑定、DLL、依赖与 JNI 元数据。
@@ -139,7 +167,19 @@ proxy_password=
 
 ## GitHub Actions
 
-[Windows CI](.github/workflows/ci.yml) 支持 push、PR 和手动运行。PR、fork 和普通分支只做不带正式凭据的构建检查。原生分发须由仓库管理员设置：
+[Desktop CI](.github/workflows/ci.yml) 支持 push、PR 和手动运行，使用同一构建入口覆盖以下五个目标。runner 标签依据 [GitHub 官方说明](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)。
+
+| 目标 | Runner | 应用及安装格式 |
+| --- | --- | --- |
+| Windows x64 | `windows-2022` | ZIP、MSI |
+| macOS arm64 | `macos-15` | APP ZIP、DMG |
+| macOS x64 | `macos-15-intel` | APP ZIP、DMG |
+| Linux x64 | `ubuntu-24.04` | tar.gz、DEB |
+| Linux arm64 | `ubuntu-24.04-arm` | tar.gz、DEB |
+
+默认 `checks` 矩阵不接触应用 Secrets：五个目标都执行脚本与安装器契约、完整 JVM/UI 回归、打包后真实 TDLib 验收，并上传明确标为 `preview-` 的无凭据预览包。测试失败会阻止正式打包，不通过 `continue-on-error` 隐藏。Linux 使用 Xvfb；各原生缓存按 OS、架构、runner 镜像、源码 pin 和构建脚本隔离。
+
+正式 `distributions` 矩阵须由仓库管理员设置：
 
 | 类型 | 名称 | 用途 |
 | --- | --- | --- |
@@ -147,7 +187,9 @@ proxy_password=
 | Repository Secret | `NNGGRAM_API_ID` | 自己申请的 Telegram API ID |
 | Repository Secret | `NNGGRAM_API_HASH` | 与之配套的 API Hash |
 
-只有匹配仓库的默认分支或 `dev` 的非 PR 构建会注入正式应用身份。流水线先测试，再构建 Native Image，运行生成 EXE 的 TDLib、平台和媒体离线检查，最后生成 MSI、便携 ZIP、校验和及体积报告。Actions 产物保存 14 天，不自动创建 Release。源码中不公开真实凭据；客户端二进制内的应用身份可被提取，不能当作服务端秘密。
+只有匹配仓库的默认分支或 `dev` 的非 PR 构建，且五个平台的检查全部通过，正式打包步骤才注入应用身份，生成相应平台的应用、安装包、校验和和验证记录。产物保存 14 天，不自动创建 Release。缺失身份会明确失败，不把预览包当正式包。源码中不公开真实凭据；客户端二进制内的应用身份可被提取，不能当作服务端秘密。
+
+原 Windows GraalVM/MSVC 流水线保留为可选 `native` 作业，额外设置 `ENABLE_WINDOWS_NATIVE=true` 才运行，不再作为其他平台构建的前置条件。系统 Toast、Windows 电源恢复回调和按原生句柄精确删除的自动保存仍是 Windows 专用增强；其他平台保留应用内通知、声音、应用活动自动锁定和手动保存，不调用 Win32 伪装为已支持。
 
 可选 Telegram 分发沿用自动回退：设 `TELEGRAM_ENABLED=true`，提供 `TELEGRAM_BOT_TOKEN` 和 `TELEGRAM_CHAT_ID` Secrets。可选的 `TELEGRAM_API_ID` / `TELEGRAM_API_HASH` 用于临时 Bot API 服务，和桌面应用身份分开。任一为空时跳过本地服务；50,000,000 字节以内发附件，超限发送 Actions 下载链接并提示需要登录 GitHub。未启用时不发送通知。
 

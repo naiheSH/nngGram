@@ -1,7 +1,8 @@
 package com.badnng.moe.notifications
 
 import com.badnng.moe.media.VideoAudioOutput
-import com.badnng.moe.media.WinMmAudioOutput
+import com.badnng.moe.media.DesktopAudio
+import com.badnng.moe.platform.DesktopPlatform
 import com.sun.jna.Function
 import com.sun.jna.Memory
 import com.sun.jna.Native
@@ -27,15 +28,16 @@ internal interface DeviceNotificationSignals : AutoCloseable {
 }
 
 /**
- * Tao-owned HWND and toolkit-free WinMM output; never creates a toast, process or Java Sound device.
+ * Shared notification audio ownership; platform factories choose the device and attention backend.
  * One lazy daemon worker owns default and prepared playback, with one coalesced pending sound.
  * Preview owners use their own instance, so stopping a preview cannot stop notifications.
  */
-internal class WindowsNotificationSignals(
+internal class QueuedNotificationSignals(
     private val hwnd: () -> Long,
-    private val audioFactory: () -> VideoAudioOutput = { WinMmAudioOutput() },
+    private val audioFactory: () -> VideoAudioOutput = DesktopAudio::output,
     private val flashDriver: NotificationWindowFlashDriver = NativeNotificationWindowFlashDriver(),
     private val pcmFactory: (Int) -> ByteArray = ::deviceDefaultNotificationPcm,
+    private val windowsAttention: Boolean = true,
 ) : DeviceNotificationSignals {
     private val guard = java.lang.Object()
     private var closed = false
@@ -88,6 +90,15 @@ internal class WindowsNotificationSignals(
     }
 
     override fun flash() {
+        if (!windowsAttention) {
+            runCatching {
+                if (java.awt.Taskbar.isTaskbarSupported()) {
+                    val taskbar = java.awt.Taskbar.getTaskbar()
+                    if (taskbar.isSupported(java.awt.Taskbar.Feature.USER_ATTENTION)) taskbar.requestUserAttention(false, false)
+                }
+            }
+            return
+        }
         var failures = 0
         synchronized(guard) {
             if (closed) return
@@ -255,6 +266,12 @@ internal class WindowsNotificationSignals(
         const val PREPARED_CHUNK_BYTES = NotificationSoundPcm.BYTES_PER_MILLISECOND * 10
     }
 }
+
+/** Kept for Windows backend contract tests and downstream source compatibility. */
+internal typealias WindowsNotificationSignals = QueuedNotificationSignals
+
+internal fun desktopNotificationSignals(window: () -> Long): DeviceNotificationSignals =
+    QueuedNotificationSignals(window, windowsAttention = DesktopPlatform.current.isWindows)
 
 /** Injecting this boundary keeps tests independent of User32 and the actual Tao window. */
 internal fun interface NotificationWindowFlashDriver {

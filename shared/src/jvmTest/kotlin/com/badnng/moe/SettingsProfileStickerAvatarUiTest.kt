@@ -1395,7 +1395,7 @@ class SettingsProfileStickerAvatarUiTest {
         val field = assertNotNull(semanticsBounds { it.getOrNull(SemanticsProperties.EditableText) != null }.firstOrNull())
         click(field)
         val original = focusedCatalogFilter(field)
-        keyStroke(KeyEvent.VK_A, control = true); settledFrame(2, 16)
+        selectAll(); settledFrame(2, 16)
         val selected = focusedCatalogFilter(field)
         assertEquals(original.first, selected.first, "Ctrl+A must preserve the current filter text")
         assertEquals(0, selected.second.min, "Ctrl+A must select the filter from the start")

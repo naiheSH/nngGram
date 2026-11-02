@@ -30,3 +30,15 @@ class WorkflowTests(unittest.TestCase):
             self.skipTest('PyYAML optional; actionlint handles workflow validation separately')
         for path in (ROOT / '.github').rglob('*.yml'):
             self.assertIsInstance(yaml.safe_load(path.read_text(encoding='utf-8-sig')), dict)
+
+    def test_desktop_matrix_and_release_boundaries(self):
+        text = (ROOT / '.github/workflows/ci.yml').read_text(encoding='utf-8')
+        for profile in ('windows-x64', 'macos-x64', 'macos-arm64', 'linux-x64', 'linux-arm64'):
+            self.assertGreaterEqual(text.count('profile: ' + profile), 2)
+        distribution = text.split('  distributions:', 1)[1].split('  telegram:', 1)[0]
+        self.assertIn('needs: checks', distribution)
+        self.assertIn("github.event_name != 'pull_request'", distribution)
+        self.assertIn('github.repository == vars.DISTRIBUTION_REPOSITORY', distribution)
+        self.assertIn('--release --installer --skip-tests', distribution)
+        self.assertIn('xvfb-run -a python scripts/desktop.py', text)
+        self.assertNotIn('portableCoreChecks', (ROOT / 'shared/build.gradle.kts').read_text())

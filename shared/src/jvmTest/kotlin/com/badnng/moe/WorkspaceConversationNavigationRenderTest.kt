@@ -90,7 +90,7 @@ class WorkspaceConversationNavigationRenderTest {
                 assertEquals(listOf(DRAFT_B), scene.fields())
                 scene.click(scene.field())
                 scene.settledFrame(2)
-                scene.keyStroke(KeyEvent.VK_A, control = true)
+                scene.selectAll()
                 scene.settledFrame(2)
                 scene.keyStroke(KeyEvent.VK_X, 'x')
                 scene.settledFrame(2)

@@ -169,6 +169,8 @@ class SettingsLocalWallpaperRenderTest {
         reveal(width, height, minimumHeight = 208 * density - 1) { previewNodes() }
     private fun ComposePixelScene.reveal(width: Int, height: Int, minimumHeight: Float = 8f, nodes: () -> List<Rect>): Rect {
         var down = false
+        var wheelStep = 8f
+        var previousDirection = 0
         repeat(240) { index ->
             val bounds = nodes().firstOrNull { it.width > 0 && it.height > 0 }
             if (bounds != null && bounds.height >= minimumHeight && bounds.top >= 4 && bounds.bottom <= height - 4)
@@ -185,7 +187,12 @@ class SettingsLocalWallpaperRenderTest {
                 bounds != null && bounds.height < minimumHeight -> if (bounds.center.y < height / 2f) -8f else 8f
                 else -> if ((index < 120) == down) 8f else -8f
             }
-            scrollAt(width / 2f, height / 2f, deltaY = delta)
+            val direction = if (delta < 0) -1 else 1
+            if (previousDirection != 0 && direction != previousDirection)
+                wheelStep = (wheelStep / 2).coerceAtLeast(.02f)
+            previousDirection = direction
+            // Avoid skipping the narrow interval in which a 208dp preview fits.
+            scrollAt(width - 4f, height / 2f, deltaY = direction * wheelStep)
             settledFrame(5, 32)
         }
         fail("The actual settings scroll container did not reveal the requested control in ${width}x$height.")

@@ -20,11 +20,17 @@ class GenerateTdlibNativeMetadata {
     private static final String PACKAGE = "org.drinkless.tdlib.";
 
     public static void main(String[] args) throws Exception {
-        if (args.length < 1 || args.length > 2) throw new IllegalArgumentException("Expected repository root and optional --check");
+        if (args.length < 1) throw new IllegalArgumentException("Expected repository root and optional --check/--binding=/--output=");
         Path root = Path.of(args[0]).toAbsolutePath().normalize();
-        boolean check = args.length == 2 && args[1].equals("--check");
-        if (args.length == 2 && !check) throw new IllegalArgumentException("Unknown metadata generation option");
+        boolean check = false;
         Path binding = root.resolve("native/windows-x64/tdlib.jar");
+        Path resources = root.resolve("shared/src/jvmMain/resources");
+        for (int i = 1; i < args.length; i++) {
+            if (args[i].equals("--check")) check = true;
+            else if (args[i].startsWith("--binding=")) binding = root.resolve(args[i].substring(10));
+            else if (args[i].startsWith("--output=")) resources = root.resolve(args[i].substring(9));
+            else throw new IllegalArgumentException("Unknown metadata generation option");
+        }
         Properties pin = new Properties();
         try (InputStream input = Files.newInputStream(root.resolve("native/tdlib-source.properties"))) { pin.load(input); }
         Properties provenance = new Properties();
@@ -85,7 +91,6 @@ class GenerateTdlibNativeMetadata {
             entries.add("  {\"name\":" + quote("java.lang." + boxed[i]) + ",\"methods\":[" + method(accessors[i], List.of()) + "]}");
         }
         entries.add("  {\"name\":\"java.lang.String\"}");
-        Path resources = root.resolve("shared/src/jvmMain/resources");
         Path metadata = resources.resolve("META-INF/native-image/com.badnng.moe/tdlib");
         write(metadata.resolve("jni-config.json"), "[\n" + String.join(",\n", entries) + "\n]\n", check);
         // Clear the old duplicate reflection registry during metadata regeneration.

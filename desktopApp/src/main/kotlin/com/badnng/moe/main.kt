@@ -740,6 +740,7 @@ private fun NucleusApplicationScope.DesktopWindow(
         NucleusDecoratedWindowTheme(isDark = titleDark) {
             DecoratedWindow(
                 onCloseRequest = onClose, title = title, state = state,
+                icon = remember { androidx.compose.ui.graphics.painter.BitmapPainter(DesktopBranding.windowIcon) },
                 minimumSize = DpSize(geometry.minimumWidth.dp, geometry.minimumHeight.dp),
             ) {
                 val activity = remember(nucleusWindow) {
@@ -748,7 +749,10 @@ private fun NucleusApplicationScope.DesktopWindow(
                 DisposableEffect(activity) { onDispose { activity.close() } }
                 val active by activity.active.collectAsStateWithLifecycle(minActiveState = Lifecycle.State.CREATED)
                 val nativeOwner = nucleusWindow.unsafe.taoWindow?.nativeHandle
-                val clipboard = remember(nativeOwner) { WindowsClipboard(checkNotNull(nativeOwner)) }
+                val windows = com.badnng.moe.platform.DesktopPlatform.current.isWindows
+                val clipboard = remember(nativeOwner, windows) {
+                    if (windows) WindowsClipboard(checkNotNull(nativeOwner)) else DesktopSystemClipboard()
+                }
                 val retryingClipboard = remember(clipboard) { RetryingClipboard(clipboard) }
                 CompositionLocalProvider(
                     LocalClipboard provides retryingClipboard,

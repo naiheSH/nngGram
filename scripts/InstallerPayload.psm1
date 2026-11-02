@@ -37,7 +37,8 @@ function Get-NngGramPayload {
     foreach ($line in Get-Content -LiteralPath $lookup['manifest.properties'].FullName) {
         if ($line -match '^([^#=]+)=(.*)$') { $manifest[$Matches[1].Trim()] = $Matches[2].Trim() }
     }
-    if ($manifest['source.commit'] -ne '9d92b49bc5d0d2e29fe518239af647a88f8680e6' -or
+    $pin = ConvertFrom-StringData (Get-Content -LiteralPath (Join-Path $PSScriptRoot '../native/tdlib-source.properties') -Raw)
+    if ($manifest['source.commit'] -ne $pin.commit -or
         $manifest['architecture'] -ne 'x64' -or $manifest['binding'] -ne 'official-java-jni') { throw 'The payload does not match the pinned official Windows x64 TDLib bundle.' }
     if (!$manifest.ContainsKey('load.order') -or !$manifest.ContainsKey('sha256.tdlib.jar') -or
         'tdjni.dll' -notin $manifest['load.order'].Split(',')) { throw 'The TDLib manifest is incomplete.' }

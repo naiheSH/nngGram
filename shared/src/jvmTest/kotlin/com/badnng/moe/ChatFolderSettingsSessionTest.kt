@@ -136,6 +136,9 @@ class ChatFolderSettingsSessionTest {
                 scene.settledFrame(4, 100)
             }
             scene.replace("", "Alpha")
+            // Capture the anchor after the focused text-field label has finished
+            // reflowing the list item, including the host's font metrics.
+            scene.settledFrame()
             assertEquals("Alpha", editor.query.text)
             val index = editor.listState.firstVisibleItemIndex
             val offset = editor.listState.firstVisibleItemScrollOffset
@@ -366,7 +369,7 @@ class ChatFolderSettingsSessionTest {
     private fun ComposePixelScene.replace(previous: String, replacement: String) {
         click(assertNotNull(editableBounds(previous), "Expected visible editor '$previous'"))
         settledFrame(2, 16)
-        keyStroke(KeyEvent.VK_A, control = true)
+        selectAll()
         settledFrame(2, 16)
         keyStroke(KeyEvent.VK_BACK_SPACE)
         settledFrame(2, 16)

@@ -219,18 +219,18 @@ class AutoMediaCopyJournalTest {
         Files.write(source, bytes)
         val request = AutoMediaCopyRequest(AutoMediaCopyAccount(123, account), 1, "unique-synthetic", source, 0,
             root.resolve("downloads"), "合成.pdf")
-        val result = assertIs<AutoMediaCopyResult.Saved>(AutoMediaCopyJournal().copy(request, { true }, { true }))
+        val result = assertIs<AutoMediaCopyResult.Saved>(AutoMediaCopyJournal(PortableAutoMediaCopyIo).copy(request, { true }, { true }))
         assertContentEquals(bytes, Files.readAllBytes(result.path))
         assertContentEquals(bytes, Files.readAllBytes(source))
         val record = Files.walk(account).use { paths ->
             val path = paths.filter { it.fileName.toString().endsWith(".properties") }.findFirst().orElseThrow()
-            assertNotNull(NioAutoMediaCopyIo.loadJournal(path))
+            assertNotNull(PortableAutoMediaCopyIo.loadJournal(path))
         }
         assertEquals(bytes.size.toLong(), record.length)
         assertEquals(FakeIo.hash(bytes), record.contentHash)
         assertNotNull(record.targetIdentity, "A committed Windows copy needs FILE_ID_INFO when NIO fileKey is null.")
         assertEquals(record.targetIdentity, stableMediaFileIdentity(result.path))
-        assertTrue(assertIs<AutoMediaCopyResult.Saved>(AutoMediaCopyJournal().copy(request, { true }, { true })).alreadyPresent)
+        assertTrue(assertIs<AutoMediaCopyResult.Saved>(AutoMediaCopyJournal(PortableAutoMediaCopyIo).copy(request, { true }, { true })).alreadyPresent)
         Files.list(request.destination).use { assertEquals(1L, it.count()) }
         // Equal bytes at the same name are not the original publication. Create the
         // replacement before unlinking the target so its native ID cannot be reused.
@@ -240,9 +240,9 @@ class AutoMediaCopyJournalTest {
         Files.delete(result.path)
         Files.move(replacement, result.path)
         assertEquals(AutoMediaCopyIssue.USER_CHANGED_TARGET,
-            assertIs<AutoMediaCopyResult.Pending>(AutoMediaCopyJournal().copy(request, { true }, { true })).issue)
+            assertIs<AutoMediaCopyResult.Pending>(AutoMediaCopyJournal(PortableAutoMediaCopyIo).copy(request, { true }, { true })).issue)
         Files.writeString(result.path, "user changed")
-        assertIs<AutoMediaCopyResult.Pending>(AutoMediaCopyJournal().copy(request, { true }, { true }))
+        assertIs<AutoMediaCopyResult.Pending>(AutoMediaCopyJournal(PortableAutoMediaCopyIo).copy(request, { true }, { true }))
         assertEquals("user changed", Files.readString(result.path))
         Files.list(request.destination).use { assertEquals(1L, it.count()) }
     }
@@ -304,10 +304,10 @@ class AutoMediaCopyJournalTest {
         Files.writeString(source, "actual native bytes")
         val request = AutoMediaCopyRequest(AutoMediaCopyAccount(123, account), 1, "synthetic", source, 1,
             root.resolve("downloads"), "document.pdf")
-        assertIs<AutoMediaCopyResult.Failed>(AutoMediaCopyJournal().copy(request, { true }, { true }))
+        assertIs<AutoMediaCopyResult.Failed>(AutoMediaCopyJournal(PortableAutoMediaCopyIo).copy(request, { true }, { true }))
         Files.list(request.destination).use { assertEquals(0L, it.count()) }
         val unsafe = request.copy(suggestedName = "document.exe ", destination = root.resolve("never-created"))
-        assertIs<AutoMediaCopyResult.Failed>(AutoMediaCopyJournal().copy(unsafe, { true }, { true }))
+        assertIs<AutoMediaCopyResult.Failed>(AutoMediaCopyJournal(PortableAutoMediaCopyIo).copy(unsafe, { true }, { true }))
         assertFalse(Files.exists(unsafe.destination))
     }
 

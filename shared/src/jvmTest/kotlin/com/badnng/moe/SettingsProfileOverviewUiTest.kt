@@ -362,7 +362,7 @@ class SettingsProfileOverviewUiTest {
         settledFrame(4, 16)
     }
     private fun ComposePixelScene.replace(rect: Rect, value: String) {
-        click(rect); keyStroke(KeyEvent.VK_A, control = true); settledFrame(2, 16)
+        click(rect); selectAll(); settledFrame(2, 16)
         keyStroke(KeyEvent.VK_BACK_SPACE); settledFrame(2, 16)
         for (char in value) { keyStroke(KeyEvent.getExtendedKeyCodeForChar(char.code), char); settledFrame(1, 16) }
         settledFrame()

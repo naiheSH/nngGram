@@ -78,11 +78,20 @@ class OfficialTdContactSignupTest {
             }
             val results = mutableListOf<ContactSignupSaveResult>()
             api.save(value(true), false, { true }, results::add)
-            if (stage >= 1) requests.last().reply(TdApi.OptionValueBoolean(false))
-            if (stage >= 2) requests.last().reply(TdApi.Ok())
-            requests.last().fail(); requests.last().reply(TdApi.Ok())
+            if (stage >= 1) requests[0].reply(TdApi.OptionValueBoolean(false))
+            if (stage >= 2) requests[1].reply(TdApi.Ok())
             assertEquals(stage + 1, requests.size); assertNotNull(results.single().error)
             assertEquals(stage == 2, results.single().locallyAccepted)
+            val failed = requests[stage]
+            failed.fail(); failed.reply(TdApi.Ok())
+            if (stage == 1 && failure != 0) {
+                // An exception/disconnect after dispatch is not a rejection. Its late
+                // real Ok settles the same write and permits one current readback.
+                assertEquals(3, requests.size)
+                requests[2].reply(TdApi.OptionValueBoolean(true))
+                assertEquals(2, results.size)
+                assertTrue(results.last().locallyAccepted); assertNull(results.last().error)
+            } else { assertEquals(stage + 1, requests.size); assertEquals(1, results.size) }
         }
         val f = Fixture(); val results = mutableListOf<ContactSignupSaveResult>()
         f.api.save(value(true), false, f::current, results::add)

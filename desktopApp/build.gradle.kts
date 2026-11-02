@@ -9,6 +9,20 @@ plugins {
     alias(libs.plugins.nucleus)
 }
 
+// Nucleus patches Mach-O build versions and signatures during app-image creation.
+// Hash the final shipped dylibs, then seal the updated manifest into the app signature.
+if (System.getProperty("os.name").startsWith("Mac")) {
+    val finalizer = rootProject.file("scripts/finalize-macos-app.py")
+    val appImage = layout.buildDirectory.dir("compose/binaries/main/app/nngGram.app")
+    val finalizeMacosApp by tasks.registering(Exec::class) {
+        dependsOn("createDistributable")
+        commandLine("python3", finalizer.absolutePath, appImage.get().asFile.absolutePath)
+    }
+    tasks.matching { it.name == "packageDmg" }.configureEach {
+        dependsOn(finalizeMacosApp)
+    }
+}
+
 dependencies {
     implementation(project(":shared"))
 
@@ -27,9 +41,11 @@ dependencies {
 // Hot Reload copies runtime JARs into build/run without their adjacent DLLs.
 // Apply to JavaExec so IDE-injected hotRun/MainKt tasks get the same location
 // as ordinary Gradle run tasks. Explicit local overrides retain precedence.
+val desktopNativeProfile: String by rootProject.extra
+val developmentNativeDirectory = rootProject.file("native/$desktopNativeProfile").absolutePath
 val developmentTdlibDirectory = providers.systemProperty("nnggram.tdlib.dir")
     .orElse(providers.environmentVariable("NNGGRAM_TDLIB_DIR"))
-    .orElse(rootProject.layout.projectDirectory.dir("native/windows-x64").asFile.absolutePath)
+    .orElse(developmentNativeDirectory)
 tasks.withType<JavaExec>().configureEach {
     systemProperty("nnggram.tdlib.dir", developmentTdlibDirectory.get())
 }
@@ -56,10 +72,27 @@ nucleus {
         nativeDistributions {
             appResourcesRootDir.set(rootProject.layout.projectDirectory.dir("native"))
             // Required by the desktop dependencies; verified with suggestRuntimeModules.
-            modules("java.instrument", "jdk.unsupported")
-            targetFormats(TargetFormat.Msi)
+            modules("java.instrument", "jdk.unsupported", "jdk.charsets", "jdk.localedata")
+            targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
             packageName = "nngGram"
             packageVersion = "0.1.0"
+            macOS {
+                iconFile.set(project.file("src/main/resources/branding/nnggram.icns"))
+                // jpackage rejects CFBundleShortVersionString with a zero major version.
+                packageVersion = "1.0.0"
+                bundleID = "com.badnng.nnggram"
+                infoPlist {
+                    extraKeysRawXml = "<key>NSMicrophoneUsageDescription</key><string>录制并发送语音消息</string>"
+                }
+            }
+            linux {
+                iconFile.set(project.file("src/main/resources/branding/nnggram.png"))
+                packageName = "nnggram"
+                debDepends = listOf("ffmpeg", "libssl3t64", "zlib1g", "libasound2t64", "libgl1", "libfontconfig1")
+            }
+            windows {
+                iconFile.set(project.file("src/main/resources/branding/nnggram.ico"))
+            }
         }
     }
 }
@@ -68,6 +101,7 @@ nucleus {
 // inside dependency JARs. Ship the exact Windows x64 libraries beside Skiko so
 // ANGLE's module-relative libGLESv2 lookup works without a per-user extraction cache.
 val copyGraalvmWindowsRuntimeLibraries by tasks.registering(Copy::class) {
+    onlyIf { System.getProperty("os.name").startsWith("Windows") }
     dependsOn(configurations.runtimeClasspath)
     from(configurations.runtimeClasspath.map { files ->
         files.filter { it.extension == "jar" }.map { zipTree(it) }

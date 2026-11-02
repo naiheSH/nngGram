@@ -123,8 +123,8 @@ internal fun SettingsAdvancedPage(snapshot: SettingsSnapshot, actions: SettingsA
                     if (!addingProxy && canWriteProxy()) shortcutFocus.requestFocus()
                 }.onPreviewKeyEvent { event ->
                 // The inline add form owns ordinary copy shortcuts while it is being edited.
-                if (!addingProxy && sharing.canShareList && event.key == Key.C && event.isCtrlPressed &&
-                    !event.isAltPressed && !event.isShiftPressed && !event.isMetaPressed) {
+                if (!addingProxy && sharing.canShareList && event.key == Key.C && (event.isCtrlPressed || event.isMetaPressed) &&
+                    !event.isAltPressed && !event.isShiftPressed) {
                     if (event.type == KeyEventType.KeyUp) sharing.shareList()
                     true
                 } else false

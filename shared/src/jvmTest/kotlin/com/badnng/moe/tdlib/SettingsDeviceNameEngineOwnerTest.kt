@@ -60,7 +60,7 @@ class SettingsDeviceNameEngineOwnerTest {
 
     private suspend fun TestScope.withEngine(block: suspend TestScope.(TdEngine, Fixture) -> Unit) {
         val fixture = Fixture()
-        val engine = TdEngine(fixture.store, fixture, StandardTestDispatcher(testScheduler))
+        val engine = syntheticOpenEngine(fixture.store, fixture, StandardTestDispatcher(testScheduler))
         try {
             assertTrue(engine.start()); runCurrent()
             fixture.auth(AuthorizationPhase.WAITING_PARAMETERS); runCurrent()
@@ -88,7 +88,7 @@ class SettingsDeviceNameEngineOwnerTest {
         override fun create(onAuthorization: (AuthorizationDetails) -> Unit, onConnection: (ConnectionPhase) -> Unit,
             onError: () -> Unit, onChatEvent: (ChatEvent) -> Unit): TdSession {
             authorization = onAuthorization
-            return object : TdSession {
+            return object : SyntheticOpenKeySession {
                 override fun authorizationReady() = ready
                 override val interactionGate = gate
                 override val settings: TdSettingsSession = this@Fixture.settings

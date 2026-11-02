@@ -175,7 +175,7 @@ class SettingsUsernameAvailabilityEngineGateTest {
 
     private suspend fun TestScope.withEngine(block: suspend TestScope.(TdEngine, Fixture) -> Unit) {
         val f = Fixture()
-        val engine = TdEngine(f.store, f, StandardTestDispatcher(testScheduler))
+        val engine = syntheticOpenEngine(f.store, f, StandardTestDispatcher(testScheduler))
         try {
             assertTrue(engine.start()); runCurrent()
             f.auth(AuthorizationPhase.WAITING_PARAMETERS); runCurrent()
@@ -211,7 +211,7 @@ class SettingsUsernameAvailabilityEngineGateTest {
             onError: () -> Unit, onChatEvent: (ChatEvent) -> Unit,
         ): TdSession {
             authorization = onAuthorization
-            return object : TdSession {
+            return object : SyntheticOpenKeySession {
                 override fun authorizationReady() = this@Fixture.ready
                 override val settings: TdSettingsSession = this@Fixture.settings
                 override val interactionGate = gate

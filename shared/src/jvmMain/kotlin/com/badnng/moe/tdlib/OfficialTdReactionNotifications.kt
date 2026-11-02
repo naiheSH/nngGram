@@ -137,9 +137,10 @@ internal class OfficialTdReactionNotifications(
             desired = attempt.desired,
             actual = actual,
             error = when {
+                !ownerActive -> SettingsError.NOT_READY
                 accepted -> actual.error
                 response != null -> settingsError(response)
-                !ownerActive -> SettingsError.NOT_READY
+                SettingsSpecialMutationContext.receipt()?.outcome == SettingsSpecialWriteOutcome.NOT_DISPATCHED -> SettingsError.NOT_READY
                 failure != null -> failure
                 else -> SettingsError.REQUEST_FAILED
             },

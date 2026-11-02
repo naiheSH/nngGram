@@ -244,12 +244,12 @@ class SettingsProxySharingUiTest {
     }
 
     @Test
-    fun controlCInTheProxyGroupSharesTheListButTheAddFormKeepsTextCopy() {
+    fun copyShortcutInTheProxyGroupSharesTheListButTheAddFormKeepsTextCopy() {
         val f = Fixture()
         f.scene().use { scene ->
             scene.settledFrame(); f.publish(f.pages.single(), 11); scene.settledFrame()
             scene.click(scene.revealAction("alpha.invalid:1080", f)); scene.settledFrame()
-            scene.keyStroke(KeyEvent.VK_C, 'c', control = true); scene.settledFrame()
+            scene.shortcut(KeyEvent.VK_C); scene.settledFrame()
             assertEquals(1, f.shares.size)
             assertIs<SettingsProxyShareTarget.All>(f.shares.single().request.target)
             assertTrue(f.clipboard.writes.isEmpty())
@@ -267,9 +267,9 @@ class SettingsProxySharingUiTest {
                 scene.keyStroke(KeyEvent.getExtendedKeyCodeForChar(character.code), character)
                 scene.settledFrame(1, 16)
             }
-            scene.keyStroke(KeyEvent.VK_A, 'a', control = true); scene.settledFrame()
+            scene.selectAll(); scene.settledFrame()
             val previousWrites = f.clipboard.writes.size + f.modernClipboard.writes
-            scene.keyStroke(KeyEvent.VK_C, 'c', control = true); scene.settledFrame()
+            scene.shortcut(KeyEvent.VK_C); scene.settledFrame()
             assertEquals(1, f.shares.size, "Text-field copy cannot initiate a proxy-list share.")
             assertTrue(f.clipboard.writes.size + f.modernClipboard.writes > previousWrites,
                 "The real focused field must receive its copy shortcut using an in-memory clipboard.")

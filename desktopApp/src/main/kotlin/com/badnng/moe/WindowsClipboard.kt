@@ -25,8 +25,11 @@ import java.io.File
 import java.io.InputStream
 
 /** Transferable is a toolkit-free container; the OS is accessed only through Win32. */
-internal class WindowsClipboard(owner: Long, access: WindowsClipboardAccess? = null) : Clipboard, AttachmentClipboard,
-    SettingsProxyQrClipboard, SettingsProxyTextClipboard {
+internal interface DesktopClipboardHost : Clipboard, AttachmentClipboard, SettingsProxyQrClipboard, SettingsProxyTextClipboard {
+    val manager: ClipboardManager
+}
+
+internal class WindowsClipboard(owner: Long, access: WindowsClipboardAccess? = null) : DesktopClipboardHost {
     init { require(owner != 0L) { "A native clipboard requires a live window owner." } }
     private val owner = owner
     private val access = access ?: Win32ClipboardAccess()
@@ -125,7 +128,7 @@ internal class WindowsClipboard(owner: Long, access: WindowsClipboardAccess? = n
         override fun toString() = "PreparedProxyClipboard(<redacted>)"
     }
 
-    val manager: ClipboardManager = object : ClipboardManager {
+    override val manager: ClipboardManager = object : ClipboardManager {
         override fun getText(): AnnotatedString? = try {
             withClipboard { this@WindowsClipboard.access.read(WindowsClipboardFormats.UNICODE_TEXT, WindowsClipboardFormats.MAX_TEXT_BYTES) }
                 ?.let(WindowsClipboardFormats::decodeText)?.let(::AnnotatedString)

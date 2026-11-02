@@ -34,7 +34,8 @@ internal object MediaTools {
         val candidates = mutableListOf<Path>()
         System.getProperty("nnggram.$key.path")?.takeIf(String::isNotBlank)?.let { candidates.add(Path.of(it)) }
         System.getenv("NNGGRAM_${key.uppercase()}_PATH")?.takeIf(String::isNotBlank)?.let { candidates.add(Path.of(it)) }
-        MediaDecoder.findFfmpeg()?.parent?.let { candidates.add(it.resolve(name)) }
+        val tool = com.badnng.moe.platform.DesktopPlatform.current.executable(key)
+        MediaDecoder.findFfmpeg()?.parent?.let { candidates.add(it.resolve(tool)) }
         return candidates.firstOrNull(Files::isRegularFile)
     }
 

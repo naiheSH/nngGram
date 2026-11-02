@@ -290,7 +290,7 @@ class LocalLockUiTest {
         click(rect)
         settledFrame(2, 16)
         val original = focusedSecretEditor(rect)
-        keyStroke(KeyEvent.VK_A, control = true)
+        selectAll()
         settledFrame(2, 16)
         val selected = focusedSecretEditor(rect)
         assertEquals(original.first, selected.first, "Ctrl+A must preserve the displayed secret value")

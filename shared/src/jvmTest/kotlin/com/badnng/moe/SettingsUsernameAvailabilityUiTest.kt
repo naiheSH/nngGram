@@ -63,7 +63,7 @@ class SettingsUsernameAvailabilityUiTest {
             val old = scene.dispatch(f)
             assertTrue(old.current())
             val waitCount = f.clock.waits.count { it.millis == 200L }
-            scene.keyStroke(KeyEvent.VK_LEFT); scene.keyStroke(KeyEvent.VK_A, control = true); scene.settledFrame()
+            scene.keyStroke(KeyEvent.VK_LEFT); scene.selectAll(); scene.settledFrame()
             assertEquals(waitCount, f.clock.waits.count { it.millis == 200L })
             assertEquals(1, f.calls.size)
             scene.keyStroke(KeyEvent.VK_BACK_SPACE)
@@ -364,7 +364,7 @@ class SettingsUsernameAvailabilityUiTest {
         val editor = assertNotNull(unmergedSemanticsBounds { it.getOrNull(SemanticsProperties.EditableText) != null }
             .firstOrNull { it.overlaps(field) }, "Actual username editable hitbox")
         click(editor.intersect(field))
-        keyStroke(KeyEvent.VK_A, control = true); settledFrame(2, 16)
+        selectAll(); settledFrame(2, 16)
         keyStroke(KeyEvent.VK_BACK_SPACE); settledFrame(2, 16)
         for (character in value) { keyStroke(KeyEvent.getExtendedKeyCodeForChar(character.code), character); settledFrame(1, 16) }
         settledFrame(4, 16)

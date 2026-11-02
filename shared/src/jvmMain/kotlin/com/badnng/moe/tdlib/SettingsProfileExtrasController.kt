@@ -936,6 +936,10 @@ internal class SettingsProfileExtrasController(
                         mutationInFlight = false
                         // Receipt delivery is an internal capability, never page authority.
                         if (retired) return@enqueue
+                        // A proved accepted mutation changes the account even if its old
+                        // picker was closed. Notify the account owner before refreshing only
+                        // the new page; never publish the retired selector's state.
+                        if (response.value != null && (notifyActual || current())) profileChanged()
                         if (!current() || !accepts(token) || request != id) {
                             val fresh = snapshot.token
                             terminal.readback({ !retired && accepts(fresh) && pageActive() && !mutationInFlight &&
@@ -945,7 +949,6 @@ internal class SettingsProfileExtrasController(
                             }
                             return@enqueue
                         }
-                        if (response.value != null) profileChanged()
                         if (response.value != null) {
                             snapshot = snapshot.copy(acceptedRevision = write)
                             emit()

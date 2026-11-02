@@ -202,6 +202,16 @@ fi
 # Add default JVM options here. You can also use JAVA_OPTS and GRADLE_OPTS to pass JVM options to this script.
 DEFAULT_JVM_OPTS='"-Xmx64m" "-Xms64m"'
 
+# Optional project-local proxy. The file is gitignored and does not affect other projects.
+if [ -f "$APP_HOME/gradle-local.properties" ]; then
+    GRADLE_OPTS="$GRADLE_OPTS $(
+        awk -F= '/^systemProp[.]/ {
+            key=substr($1, 12)
+            printf " -D%s=%s", key, $2
+        }' "$APP_HOME/gradle-local.properties"
+    )"
+fi
+
 # Collect all arguments for the java command:
 #   * DEFAULT_JVM_OPTS, JAVA_OPTS, and optsEnvironmentVar are not allowed to contain shell fragments,
 #     and any embedded shellness will be escaped.

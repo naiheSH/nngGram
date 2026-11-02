@@ -244,8 +244,11 @@ class ConversationSendContinuityRenderTest {
                         for (x in 1 until bounds.width.roundToInt() - 1) add(InkPoint(x, y, frame[left + x, top + y]))
                 }
                 val background = assertNotNull(pixels.groupingBy { it.color }.eachCount().maxByOrNull { it.value }).key
-                val foreground = assertNotNull(pixels.maxByOrNull { colorDistance(it.color, background) }).color
-                val points = pixels.filter { colorDistance(it.color, foreground) < 24 && colorDistance(it.color, background) > 100 }
+                val contrast = pixels.maxOf { colorDistance(it.color, background) }
+                assertTrue(contrast > 100, "The native font must render readable text against its background.")
+                // Grayscale and subpixel font rasterizers have different solid-core palettes.
+                // Track high-contrast ink, retaining the same per-frame visibility assertion.
+                val points = pixels.filter { colorDistance(it.color, background) >= contrast * .5f }
                 assertTrue(points.size > 50, "The synthetic old row must contain measurable real text pixels.")
                 return InkSample(bounds.width, bounds.height, points)
             }

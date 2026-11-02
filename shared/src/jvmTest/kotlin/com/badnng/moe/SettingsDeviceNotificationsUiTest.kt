@@ -137,7 +137,7 @@ class SettingsDeviceNotificationsUiTest {
                 assertFalse(f.value.preferences.includeMutedFolders)
                 scene.reveal("Windows 原生桌面通知", f)
                 assertTrue(scene.text("Windows 原生桌面通知").bottom <= f.height * density)
-                assertTrue(scene.hasText("仅发布版 EXE 可用"))
+                assertTrue(scene.reveal("仅发布版 EXE 可用", f).bottom <= f.height * density)
             }
         }
     }

@@ -861,7 +861,10 @@ class InlineVideoPlayerSmokeTest {
         @Volatile var nonZeroBytes = 0L
             private set
 
-        override fun start() = synchronized(guard) { if (!closed) started = true }
+        private var startNanos = 0L
+        override fun start() = synchronized(guard) {
+            if (!closed) { started = true; startNanos = System.nanoTime() }
+        }
 
         override fun write(bytes: ByteArray, length: Int) {
             synchronized(guard) {
@@ -872,7 +875,10 @@ class InlineVideoPlayerSmokeTest {
                 nonZeroBytes += bytes.take(length).count { it != 0.toByte() }
             }
             // The player's output format is 48 kHz, stereo, signed 16-bit PCM.
-            Thread.sleep((length * 1_000L / (48_000L * 2 * 2)).coerceIn(1, 20))
+            // Pace the cumulative PCM timeline like a real device. Per-chunk sleeps
+            // accumulate scheduler latency and can turn 3 seconds of audio into 15+.
+            val remainingNanos = startNanos + bytesWritten * 1_000_000_000L / 192_000L - System.nanoTime()
+            if (remainingNanos > 0) java.util.concurrent.TimeUnit.NANOSECONDS.sleep(remainingNanos)
         }
 
         override fun drain() = synchronized(guard) { if (!closed) drained = true }

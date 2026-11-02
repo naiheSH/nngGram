@@ -144,10 +144,7 @@ internal class ComposePixelScene(
             timeNanos += stepMillis * 1_000_000L
             scene.render(timeNanos).use { image ->
                 Bitmap.makeFromImage(image).use { pixels ->
-                    ComposePixelFrame(pixels.width, pixels.height,
-                        IntArray(pixels.width * pixels.height) { index ->
-                            pixels.getColor(index % pixels.width, index / pixels.width)
-                        })
+                    pixels.copyPixelFrame()
                 }
             }
         }
@@ -210,4 +207,20 @@ private fun <T> onEventThread(action: () -> T): T {
     } catch (error: ExecutionException) {
         throw error.cause ?: error
     }
+}
+
+internal fun Bitmap.copyPixelFrame(): ComposePixelFrame {
+    // One native read replaces a JNI call for every pixel. Explicit RGBA
+    // and unpremultiplied alpha preserve getColor's ARGB result on every host.
+    val rgba = checkNotNull(this.readPixels(org.jetbrains.skia.ImageInfo(
+        this.width, this.height, org.jetbrains.skia.ColorType.RGBA_8888,
+        org.jetbrains.skia.ColorAlphaType.UNPREMUL), this.width * 4, 0, 0))
+    return ComposePixelFrame(this.width, this.height,
+        IntArray(this.width * this.height) { index ->
+            val offset = index * 4
+            ((rgba[offset + 3].toInt() and 255) shl 24) or
+                ((rgba[offset].toInt() and 255) shl 16) or
+                ((rgba[offset + 1].toInt() and 255) shl 8) or
+                (rgba[offset + 2].toInt() and 255)
+        })
 }

@@ -30,6 +30,11 @@ runs:
       run: |
         echo "MACOSX_DEPLOYMENT_TARGET=15.0" >> "$GITHUB_ENV"
         echo "NNGGRAM_MACOS_MAX_VERSION=15.0" >> "$GITHUB_ENV"
+    - name: Identify POSIX dependency recipe
+      if: runner.os != 'Windows'
+      id: posix-identity
+      shell: bash
+      run: python -B .github/scripts/posix_native_cache.py --os '${{ runner.os }}' --arch '${{ runner.arch }}' --runner-image '${{ inputs.runner-image }}'
     - name: Restore host-specific TDLib and media bundle
       if: runner.os != 'Windows'
       id: native-cache
@@ -40,12 +45,26 @@ runs:
           native/macos-arm64
           native/linux-x64
           native/linux-arm64
-        key: desktop-native-v3-${{ runner.os }}-${{ runner.arch }}-${{ inputs.runner-image }}-${{ hashFiles('.github/actions/prepare-native/action.yml', 'native/tdlib-source.properties', 'scripts/build-tdlib.*', 'scripts/GenerateTdlibNativeMetadata.java', 'scripts/bundle-macos-libraries.py', 'scripts/prepare-media*', '.github/scripts/prepare-media-ci.ps1') }}
+        key: ${{ steps.posix-identity.outputs.key }}
+        # One exact legacy archive is allowed only while its full POSIX recipe matches.
+        restore-keys: ${{ steps.posix-identity.outputs.legacy_key }}
+    - name: Reject an unrecognized POSIX cache match
+      if: runner.os != 'Windows'
+      shell: bash
+      env:
+        MATCHED_KEY: ${{ steps.native-cache.outputs.cache-matched-key }}
+        CURRENT_KEY: ${{ steps.posix-identity.outputs.key }}
+        LEGACY_KEY: ${{ steps.posix-identity.outputs.legacy_key }}
+      run: |
+        if [ -n "$MATCHED_KEY" ] && [ "$MATCHED_KEY" != "$CURRENT_KEY" ] && [ "$MATCHED_KEY" != "$LEGACY_KEY" ]; then
+          echo 'Refusing an unrecognized native dependency cache.' >&2
+          exit 1
+        fi
     - name: Prepare exact Windows TDLib cache and retained archive
       if: runner.os == 'Windows'
       uses: ./.github/actions/prepare-windows-native
     - name: Build macOS or Linux TDLib bundle
-      if: runner.os != 'Windows' && steps.native-cache.outputs.cache-hit != 'true'
+      if: runner.os != 'Windows' && steps.native-cache.outputs.cache-matched-key == ''
       shell: bash
       run: JOBS=2 sh scripts/build-tdlib.sh
     - name: Prepare verified Windows media tools
@@ -53,7 +72,7 @@ runs:
       shell: pwsh
       run: ./.github/scripts/prepare-media-ci.ps1
     - name: Prepare relocatable macOS media tools
-      if: runner.os == 'macOS' && steps.native-cache.outputs.cache-hit != 'true'
+      if: runner.os == 'macOS' && steps.native-cache.outputs.cache-matched-key == ''
       shell: bash
       run: sh scripts/prepare-media-macos.sh
     - name: Cache host bundle

@@ -36,15 +36,15 @@ class SettingsProfileOverviewUiTest {
         val f = Fixture()
         f.scene().use { scene ->
             scene.settledFrame()
-            scene.click(scene.description("复制账号 ID")); scene.settledFrame()
+            scene.click(scene.description("复制账号 ID")); scene.settledFrame(2, 16)
             assertEquals(listOf("1145141919"), f.clipboard.writes)
             assertNotNull(scene.text("已复制 ID"))
             f.clipboard.fail = true
-            scene.click(scene.description("复制账号 ID")); scene.settledFrame()
+            scene.click(scene.description("复制账号 ID")); scene.settledFrame(2, 16)
             assertNotNull(scene.text("复制失败，请重试"))
             assertEquals(1, f.clipboard.writes.size)
             f.active = false; scene.settledFrame()
-            scene.click(scene.description("复制账号 ID")); scene.settledFrame()
+            scene.click(scene.description("复制账号 ID")); scene.settledFrame(2, 16)
             assertEquals(1, f.clipboard.writes.size)
         }
     }

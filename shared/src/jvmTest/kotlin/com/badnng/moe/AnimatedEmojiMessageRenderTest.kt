@@ -539,7 +539,20 @@ class AnimatedEmojiMessageRenderTest {
         }
         assertClose(naturalInk.width / naturalInk.height, ink.width / ink.height,
             "Fitting must retain the actual natural glyph aspect.", tolerance = .08f)
-        for ((label, predicate) in listOf("yellow face" to ::isYellow, "blue tears" to ::isBlue)) {
+        // Compare spatial ink coverage as well as color. Linux may resolve the actual
+        // emoji string to a monochrome font; its native reference is authoritative.
+        for (row in 0 until 6) for (column in 0 until 6) {
+            fun cell(bounds: Rect) = Rect(bounds.left + column * bounds.width / 6,
+                bounds.top + row * bounds.height / 6, bounds.left + (column + 1) * bounds.width / 6,
+                bounds.top + (row + 1) * bounds.height / 6)
+            val predicate: (Int) -> Boolean = { colorDistance(it, BACKDROP) > 12 }
+            assertClose(colorFraction(natural, cell(naturalInk), predicate),
+                colorFraction(frame, cell(ink), predicate),
+                "Fitting must preserve the native glyph's spatial ink coverage at $column/$row.", tolerance = .3f)
+        }
+        val nativeColors = listOf("yellow face" to ::isYellow, "blue tears" to ::isBlue)
+            .filter { (_, predicate) -> colorFraction(natural, naturalInk, predicate) > .03f }
+        for ((label, predicate) in nativeColors) {
             val actualColor = colorBounds(frame, canvas, predicate)
             val referenceColor = colorBounds(natural, naturalRegion, predicate)
             val actualFraction = colorFraction(frame, ink, predicate)

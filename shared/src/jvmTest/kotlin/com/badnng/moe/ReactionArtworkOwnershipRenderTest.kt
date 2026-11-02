@@ -111,11 +111,12 @@ class ReactionArtworkOwnershipRenderTest {
             rowScene(message, assets.visual(), density, intents = intents).use { scene ->
                 scene.awaitFrame("existing stationary emoji") { count(it, ::isRed) > 30 }
                 intents.request(1, KEY, Rect(260f * density, 30f * density, 292f * density, 62f * density))
-                val flying = scene.settledFrame(3)
-                var flyingPixelsAboveTheFooter = 0
-                for (y in 0 until (165 * density).roundToInt()) for (x in 0 until flying.width)
-                    if (isRed(flying[x, y])) flyingPixelsAboveTheFooter++
-                assertTrue(flyingPixelsAboveTheFooter > 20, "The source artwork must actually travel above the stationary footer.")
+                scene.awaitFrame("source artwork travelling above the stationary footer", stepMillis = 16) { flying ->
+                    var pixels = 0
+                    for (y in 0 until (165 * density).roundToInt()) for (x in 0 until flying.width)
+                        if (isRed(flying[x, y])) pixels++
+                    pixels > 20
+                }
                 val landed = scene.awaitFrame("flight arrival with transparent native center") {
                     count(it, ::isBlue) > 10 && count(it, ::isGreen) > 10
                 }
@@ -307,11 +308,11 @@ class ReactionArtworkOwnershipRenderTest {
             }
         }
 
-    private fun ComposePixelScene.awaitFrame(stage: String, predicate: (ComposePixelFrame) -> Boolean): ComposePixelFrame {
+    private fun ComposePixelScene.awaitFrame(stage: String, stepMillis: Long = 64, predicate: (ComposePixelFrame) -> Boolean): ComposePixelFrame {
         val deadline = System.nanoTime() + 4_000_000_000L
         var lastFrame: ComposePixelFrame? = null
         do {
-            val frame = settledFrame(2)
+            val frame = settledFrame(1, stepMillis)
             lastFrame = frame
             if (predicate(frame)) return frame
             Thread.sleep(5)

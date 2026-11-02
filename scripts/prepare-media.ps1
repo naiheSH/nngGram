@@ -12,8 +12,10 @@ $executables = @('ffmpeg.exe', 'ffprobe.exe') | ForEach-Object {
     if (-not (Test-Path -LiteralPath $candidate -PathType Leaf)) { throw "$_ is missing." }
     Get-Item -LiteralPath $candidate
 }
-$license = Join-Path (Split-Path -Parent $source) 'LICENSE.txt'
-if (-not (Test-Path -LiteralPath $license -PathType Leaf)) { throw 'Keep the FFmpeg distribution LICENSE.txt beside its bin directory.' }
+$distribution = Split-Path -Parent $source
+$license = @('LICENSE', 'LICENSE.txt') | ForEach-Object { Join-Path $distribution $_ } |
+    Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
+if (-not $license) { throw 'Keep the FFmpeg distribution LICENSE or LICENSE.txt beside its bin directory.' }
 $destination = [IO.Path]::GetFullPath((Join-Path $repository 'native/windows-x64/media'))
 if (-not $destination.StartsWith($repository + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) { throw 'Invalid destination.' }
 New-Item -ItemType Directory -Path $destination -Force | Out-Null

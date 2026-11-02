@@ -841,7 +841,7 @@ class LocalLockCoordinatorTest {
             assertTrue(entered.await(2, TimeUnit.SECONDS))
             val request = Thread({
                 try { cancel() } catch (error: Throwable) { failure.compareAndSet(null, error) }
-                finally { canceled.countDown(); done.countDown() }
+                finally { done.countDown(); canceled.countDown() }
             }, "synthetic-cancel-admission").apply { isDaemon = true; start() }
             cancelling = request
             assertTrue(canceled.await(2, TimeUnit.SECONDS), "Cancel must return while the root revision read is still blocked.")

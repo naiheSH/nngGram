@@ -66,12 +66,15 @@ class OfficialReactionArtworkRenderTest {
                 scene.awaitPixels(cell, "first focused hover animation") { isRed(it) }
                 Files.delete(animation)
                 val first = scene.settledFrame(1)
-                Thread.sleep(140)
-                val next = scene.settledFrame(4)
-                assertTrue(changes(first, next, cell) > 8,
-                    "Hover must advance the supplied TGS artwork, not scale a font glyph.")
-                assertTrue(kotlin.math.abs(redCentroid(first, cell) - redCentroid(next, cell)) >= 0.5,
-                    "The native red vector shape must move, independently of the cell's hover indication.")
+                val deadline = System.nanoTime() + 2_000_000_000L
+                var moved = false
+                do {
+                    Thread.sleep(10)
+                    val next = scene.settledFrame(1, 16)
+                    moved = changes(first, next, cell) > 8 &&
+                        kotlin.math.abs(redCentroid(first, cell) - redCentroid(next, cell)) >= 0.5
+                } while (!moved && System.nanoTime() < deadline)
+                assertTrue(moved, "The native red vector shape must move, independently of the cell's hover indication.")
                 scene.moveTo(315f, 435f)
                 scene.awaitPixels(cell, "cached static artwork after source deletion") { isGreen(it) }
                 scene.settledFrame()

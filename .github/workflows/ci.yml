@@ -24,6 +24,7 @@ jobs:
           - { runner: ubuntu-24.04-arm, profile: linux-arm64 }
     timeout-minutes: 150
     env:
+      PYTHONUTF8: '1'
       # The arm64 Mac has less RAM; other check runners can use four test JVMs.
       ORG_GRADLE_PROJECT_testForks: ${{ matrix.runner == 'macos-15' && '2' || '4' }}
       NNGGRAM_GRADLE_WORKERS: ${{ matrix.runner == 'macos-15' && '2' || '4' }}

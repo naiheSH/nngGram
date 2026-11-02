@@ -53,16 +53,16 @@ class WorkflowTests(unittest.TestCase):
         self.assertIn('github.repository == vars.DISTRIBUTION_REPOSITORY', distribution)
         self.assertIn('--release --installer --skip-tests', distribution)
         self.assertIn('xvfb-run -a python scripts/desktop.py', text)
-        self.assertNotIn('portableCoreChecks', (ROOT / 'shared/build.gradle.kts').read_text())
+        self.assertNotIn('portableCoreChecks', (ROOT / 'shared/build.gradle.kts').read_text(encoding='utf-8'))
 
     def test_preview_is_available_before_full_regressions_but_release_remains_gated(self):
-        workflow = (ROOT / '.github/workflows/ci.yml').read_text()
+        workflow = (ROOT / '.github/workflows/ci.yml').read_text(encoding='utf-8')
         checks = workflow.split('  native:')[0]
         self.assertLess(checks.index('Build and smoke-test preview package'), checks.index('Run portable business and UI regressions'))
         self.assertIn('scripts/desktop.py build --installer --skip-tests', checks)
         self.assertIn('scripts/desktop.py check', checks)
         self.assertLess(checks.index('libEGL.so.1'), checks.index('uses: ./.github/actions/prepare-native'))
         self.assertIn("cache-read-only: ${{ github.event_name == 'pull_request' }}", checks)
-        native = (ROOT / '.github/actions/prepare-windows-native/action.yml').read_text()
+        native = (ROOT / '.github/actions/prepare-windows-native/action.yml').read_text(encoding='utf-8')
         self.assertLess(native.index('Preflight installed runtime licenses'), native.index('Build pinned TDLib bundle'))
         self.assertIn('tdlib-windows-unvalidated-', native)

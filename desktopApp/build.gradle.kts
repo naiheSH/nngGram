@@ -76,6 +76,9 @@ nucleus {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
             packageName = "nngGram"
             packageVersion = "0.1.0"
+            description = "Cross-platform Telegram desktop client"
+            vendor = "nngGram contributors"
+            homepage = "https://github.com/naiheSH/nngGram"
             macOS {
                 iconFile.set(project.file("src/main/resources/branding/nnggram.icns"))
                 // jpackage rejects CFBundleShortVersionString with a zero major version.
@@ -88,6 +91,8 @@ nucleus {
             linux {
                 iconFile.set(project.file("src/main/resources/branding/nnggram.png"))
                 packageName = "nnggram"
+                debMaintainer = "naiheSH <121236589+naiheSH@users.noreply.github.com>"
+                appCategory = "Network"
                 debDepends = listOf("ffmpeg", "libssl3t64", "zlib1g", "libasound2t64", "libgl1", "libegl1", "libfontconfig1")
             }
             windows {

@@ -10,14 +10,15 @@ spec.loader.exec_module(cache)
 
 class PosixCacheTests(unittest.TestCase):
     def test_legacy_migration_requires_identical_recipe_and_host(self):
-        original = cache.identities(cache.ROOT, 'macOS', 'ARM64', 'macos-15')
-        self.assertEqual(f'desktop-native-v3-macOS-ARM64-macos-15-{cache.LEGACY_ARCHIVE}', original['legacy_key'])
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             for name in cache.INPUTS:
                 target = root / name
                 target.parent.mkdir(parents=True, exist_ok=True)
-                target.write_bytes((cache.ROOT / name).read_bytes())
+                # Model the POSIX checkout even when this offline suite runs on Windows.
+                target.write_bytes((cache.ROOT / name).read_bytes().replace(b'\r\n', b'\n'))
+            original = cache.identities(root, 'macOS', 'ARM64', 'macos-15')
+            self.assertEqual(f'desktop-native-v3-macOS-ARM64-macos-15-{cache.LEGACY_ARCHIVE}', original['legacy_key'])
             windows_script = root / 'scripts/prepare-media.ps1'
             windows_script.write_text('Windows-only repair', encoding='utf-8')
             self.assertEqual(original, cache.identities(root, 'macOS', 'ARM64', 'macos-15'))
@@ -26,4 +27,4 @@ class PosixCacheTests(unittest.TestCase):
             updated = cache.identities(root, 'macOS', 'ARM64', 'macos-15')
             self.assertNotEqual(original['key'], updated['key'])
             self.assertEqual('', updated['legacy_key'])
-            self.assertNotEqual(original['key'], cache.identities(cache.ROOT, 'macOS', 'X64', 'macos-15-intel')['key'])
+            self.assertNotEqual(original['key'], cache.identities(root, 'macOS', 'X64', 'macos-15-intel')['key'])

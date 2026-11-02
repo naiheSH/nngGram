@@ -30,7 +30,10 @@ def run(*arguments):
 
 def gradle(*arguments):
     wrapper = ROOT / ('gradlew.bat' if os.name == 'nt' else 'gradlew')
-    run(wrapper, *arguments, '--no-configuration-cache', '--console=plain', '--max-workers=2')
+    workers = int(os.environ.get('NNGGRAM_GRADLE_WORKERS', '2'))
+    if workers not in range(1, 5):
+        raise ValueError('NNGGRAM_GRADLE_WORKERS must be between 1 and 4')
+    run(wrapper, *arguments, '--no-configuration-cache', '--console=plain', f'--max-workers={workers}')
 
 
 def check():
@@ -114,6 +117,7 @@ def build(args):
     metadata = {
         'platform': profile, 'runtime': 'bundled-jvm', 'builderIdentityRequired': args.release,
         'offlineNativeVerified': True, 'realAccountTested': False,
+        'testsExecutedDuringBuild': not args.skip_tests,
         'artifacts': [{'name': p.name, 'bytes': p.stat().st_size, 'sha256': digest(p)} for p in artifacts],
         'verificationDirectory': reports.name,
     }

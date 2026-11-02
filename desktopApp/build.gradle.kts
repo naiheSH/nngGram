@@ -88,7 +88,7 @@ nucleus {
             linux {
                 iconFile.set(project.file("src/main/resources/branding/nnggram.png"))
                 packageName = "nnggram"
-                debDepends = listOf("ffmpeg", "libssl3t64", "zlib1g", "libasound2t64", "libgl1", "libfontconfig1")
+                debDepends = listOf("ffmpeg", "libssl3t64", "zlib1g", "libasound2t64", "libgl1", "libegl1", "libfontconfig1")
             }
             windows {
                 iconFile.set(project.file("src/main/resources/branding/nnggram.ico"))

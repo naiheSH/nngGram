@@ -796,12 +796,14 @@ class InlineVideoPlayerSmokeTest {
     }
 
     private suspend fun awaitState(player: InlineVideoPlayer, predicate: (VideoPlayerState) -> Boolean) {
-        withTimeout(15_000) {
+        val reached = kotlinx.coroutines.withTimeoutOrNull(15_000) {
             while (!predicate(player.state.value)) {
-                assertFalse(player.state.value.failed, "Synthetic video player failed before the expected state")
+                assertFalse(player.state.value.failed, "Synthetic video player failed before the expected state: ${player.state.value}")
                 delay(20)
             }
-        }
+            true
+        } == true
+        assertTrue(reached, "Synthetic video did not reach the expected state within 15s: ${player.state.value}")
     }
 
     private suspend fun awaitCondition(predicate: () -> Boolean) {

@@ -179,7 +179,7 @@ Windows 使用 PowerShell 7.2+ 和 MSYS2 UCRT64。只有可选 Native Image 还�
 
 macOS CI 固定使用 macOS 15 runner 与 `MACOSX_DEPLOYMENT_TARGET=15.0`，打包时逐个检查原生依赖；依赖要求高于 15.0 会直接失败，不会静默提高最低系统版本。产物的 `build-info.json` 记录实际最低系统要求。
 
-默认 `checks` 矩阵不接触应用 Secrets：五个目标都执行脚本与安装器契约、完整 JVM/UI 回归、打包后真实 TDLib 验收，并上传明确标为 `preview-` 的无凭据预览包。测试失败会阻止正式打包，不通过 `continue-on-error` 隐藏。Linux 使用 Xvfb；各原生缓存按 OS、架构、runner 镜像、源码 pin 和构建脚本隔离。
+默认 `checks` 矩阵不接触应用 Secrets：五个目标都执行脚本与安装器契约，先打包并进行真实 TDLib 验收、上传明确标为 `preview-` 的无凭据预览包，再继续完整 JVM/UI 回归。预览包的构建信息会注明打包时尚未执行全量测试；正式发布仍须等待所有回归通过。测试失败会阻止正式打包，不通过 `continue-on-error` 隐藏。Linux 使用 Xvfb 和 EGL；非 PR 分支保存 Gradle 缓存。Windows 在原生编译前检查并整理 GCC 拆分许可证，归档校验失败时另存明确标为未验证的中间产物，避免编译结果直接丢失。各原生缓存按 OS、架构、runner 镜像、源码 pin 和构建脚本隔离。
 
 正式 `distributions` 矩阵须由仓库管理员设置：
 

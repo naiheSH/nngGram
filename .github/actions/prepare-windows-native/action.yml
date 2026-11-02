@@ -23,6 +23,12 @@ runs:
           git gperf mingw-w64-ucrt-x86_64-gcc
           mingw-w64-ucrt-x86_64-cmake mingw-w64-ucrt-x86_64-ninja
           mingw-w64-ucrt-x86_64-openssl mingw-w64-ucrt-x86_64-zlib
+    - name: Preflight installed runtime licenses before native compilation
+      shell: pwsh
+      run: |
+        $toolchain = Join-Path '${{ steps.msys.outputs.msys2-location }}' 'ucrt64'
+        python -B scripts/collect-windows-licenses.py --toolchain $toolchain --output (Join-Path $toolchain 'share/licenses')
+        if ($LASTEXITCODE -ne 0) { throw 'Installed runtime licenses are incomplete; native compilation has not started.' }
     - name: Compute exact TDLib source and toolchain cache identity
       id: identity
       shell: pwsh
@@ -43,9 +49,10 @@ runs:
       shell: pwsh
       run: python -B .github/scripts/tdlib_bundle.py restore --identity "$env:RUNNER_TEMP/tdlib-build-identity.json" --cache "$env:RUNNER_TEMP/tdlib-bundle-cache" --directory native/windows-x64
     - name: Build pinned TDLib bundle on exact cache miss
+      id: compile
       if: steps.cache.outputs.cache-hit != 'true'
       shell: pwsh
-      run: ./scripts/build-tdlib.ps1 -MsysRoot '${{ steps.msys.outputs.msys2-location }}' -Jdk $env:JAVA_HOME -Jobs 2
+      run: ./scripts/build-tdlib.ps1 -MsysRoot '${{ steps.msys.outputs.msys2-location }}' -Jdk $env:JAVA_HOME -Jobs 3
     - name: Validate and stage the complete newly built dependency bundle
       if: steps.cache.outputs.cache-hit != 'true'
       shell: pwsh
@@ -75,3 +82,17 @@ runs:
         if ($LASTEXITCODE -ne 0) { throw 'TDLib metadata generation failed.' }
         & "$env:JAVA_HOME/bin/java.exe" scripts/GenerateTdlibNativeMetadata.java $env:GITHUB_WORKSPACE --check
         if ($LASTEXITCODE -ne 0) { throw 'TDLib metadata verification failed.' }
+    - name: Retain compiled files when final dependency validation fails
+      if: failure() && steps.compile.outcome == 'success'
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      with:
+        name: tdlib-windows-unvalidated-${{ github.job }}-${{ github.run_id }}-${{ github.run_attempt }}
+        path: |
+          native/windows-x64/*.dll
+          native/windows-x64/*.jar
+          native/windows-x64/*.txt
+          native/windows-x64/manifest.properties
+          native/windows-x64/licenses/
+        if-no-files-found: warn
+        compression-level: 0
+        retention-days: 90

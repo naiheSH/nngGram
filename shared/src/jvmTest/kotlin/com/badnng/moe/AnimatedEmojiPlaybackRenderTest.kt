@@ -67,7 +67,9 @@ class AnimatedEmojiPlaybackRenderTest {
             scene.awaitArtwork()
             scene.renderFor(650)
             val oneCycle = draws.get()
-            scene.renderFor(300)
+            // Assert continued playback, without requiring a fixed rendering throughput
+            // from a shared GitHub runner during this 300ms observation window.
+            scene.waitForDraws(draws, minimum = oneCycle + 3)
             assertTrue(draws.get() > oneCycle + 2, "CustomEmoji::setCustomEmojiPart must not inherit the regular one-shot rule.")
         }
         // A new message can reference the same immutable file. Its playback owner must

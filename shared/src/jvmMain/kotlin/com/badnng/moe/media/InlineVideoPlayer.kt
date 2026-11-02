@@ -215,7 +215,10 @@ internal class InlineVideoPlayer(
         try {
             if (!sourceIsActive()) return@coroutineScope
             val ratio = metadata.aspectRatio.coerceIn(1.0 / 64, 64.0)
-            val width = min(960.0, 540.0 * ratio).toInt().coerceAtLeast(2)
+            // Decode at most the source's square-pixel display width. Enlarging a
+            // 64x48 source to 720x540 multiplies pipe traffic and per-frame work by
+            // over 100 without adding detail; presentation already scales the image.
+            val width = min(metadata.displayWidth.toDouble(), min(960.0, 540.0 * ratio)).toInt().coerceAtLeast(2)
             val height = (width / ratio).toInt().coerceAtLeast(2)
             // Keep decoder preroll so fps can supply the frame spanning a sparse timestamp
             // at a seek boundary, including the final interval before EOF.

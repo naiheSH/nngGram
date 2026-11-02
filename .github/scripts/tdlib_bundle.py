@@ -16,8 +16,7 @@ DLLS = {'tdjni.dll', 'libwinpthread-1.dll', 'libgcc_s_seh-1.dll', 'libstdc++-6.d
 TOP_FILES = DLLS | {'tdlib.jar', 'manifest.properties', 'TDLib-LICENSE.txt', 'toolchain-versions.txt'}
 LICENSE_PACKAGES = {'gcc-libs', 'libwinpthread', 'openssl', 'zlib', 'crt'}
 BUILD_INPUTS = ('native/tdlib-source.properties', 'scripts/build-tdlib.ps1',
-                'scripts/GenerateTdlibNativeMetadata.java', '.github/scripts/tdlib_bundle.py',
-                '.github/actions/prepare-native/action.yml', '.github/actions/prepare-windows-native/action.yml')
+                'scripts/GenerateTdlibNativeMetadata.java', 'scripts/collect-windows-licenses.py', '.github/scripts/tdlib_bundle.py')
 
 
 def digest(path):
@@ -105,7 +104,7 @@ def validate_bundle(bundle, expected):
         raise ValueError('Bundle is incomplete or contains unexpected files')
     for package in LICENSE_PACKAGES:
         if not any(name.startswith(f'licenses/{package}/') for name in files):
-            raise ValueError('Missing dependency license')
+            raise ValueError(f'Missing dependency license: {package}')
     if any(not 0 < path.stat().st_size <= 500_000_000 for path in files.values()):
         raise ValueError('Invalid dependency file size')
     manifest = properties(files['manifest.properties'].read_text(encoding='utf-8-sig'))

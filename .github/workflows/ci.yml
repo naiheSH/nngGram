@@ -23,6 +23,10 @@ jobs:
           - { runner: ubuntu-24.04, profile: linux-x64 }
           - { runner: ubuntu-24.04-arm, profile: linux-arm64 }
     timeout-minutes: 150
+    env:
+      # The arm64 Mac has less RAM; other check runners can use four test JVMs.
+      ORG_GRADLE_PROJECT_testForks: ${{ matrix.runner == 'macos-15' && '2' || '4' }}
+      NNGGRAM_GRADLE_WORKERS: ${{ matrix.runner == 'macos-15' && '2' || '4' }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -39,25 +43,32 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: ./scripts/test-windows-installer.ps1
+      - name: Install and preflight Linux graphics runtime
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libegl1 libgl1-mesa-dri fakeroot
+          python -c 'import ctypes; ctypes.CDLL("libEGL.so.1")'
       - uses: ./.github/actions/prepare-native
         with:
           runner-image: ${{ matrix.runner }}
       - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
         with:
-          cache-read-only: ${{ github.event_name == 'pull_request' || github.ref_name != github.event.repository.default_branch }}
+          cache-read-only: ${{ github.event_name == 'pull_request' }}
       - name: Prepare Windows installer tools
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
           ./.github/scripts/prepare-wix-ci.ps1
           "$env:RUNNER_TEMP/wix311" >> $env:GITHUB_PATH
-      - name: Run portable business and UI regressions, then package
+      - name: Build and smoke-test preview package
         shell: bash
         run: |
           if [ "$RUNNER_OS" = Linux ]; then
-            xvfb-run -a python scripts/desktop.py build --installer
+            xvfb-run -a python scripts/desktop.py build --installer --skip-tests
           else
-            python scripts/desktop.py build --installer
+            python scripts/desktop.py build --installer --skip-tests
           fi
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
@@ -66,6 +77,14 @@ jobs:
           if-no-files-found: error
           compression-level: 0
           retention-days: 14
+      - name: Run portable business and UI regressions
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = Linux ]; then
+            xvfb-run -a python scripts/desktop.py check
+          else
+            python scripts/desktop.py check
+          fi
       - name: Upload test evidence even after failure
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

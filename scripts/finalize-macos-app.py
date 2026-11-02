@@ -6,6 +6,7 @@ import subprocess
 import sys
 import plistlib
 import re
+import os
 
 app = Path(sys.argv[1]).resolve()
 resources = app / 'Contents/app/resources'
@@ -24,14 +25,24 @@ for line in lines:
                 digest.update(chunk)
             line = key + '=' + digest.hexdigest()
     updated.append(line)
-manifest.write_text('\n'.join(updated) + '\n')
 # Do not advertise an older OS than the host-built native dependencies actually support.
-minimum = (11, 0)
+limit = os.environ.get('NNGGRAM_MACOS_MAX_VERSION')
+minimum = tuple(int(part) for part in limit.split('.')) if limit else (11, 0)
+requirements = []
 for binary in [*resources.rglob('*.dylib'), resources / 'media/ffmpeg', resources / 'media/ffprobe']:
     if binary.is_file():
         info = subprocess.check_output(['vtool', '-show-build', str(binary)], text=True)
         for version in re.findall(r'\bminos\s+([0-9.]+)', info):
-            minimum = max(minimum, tuple(int(part) for part in version.split('.')))
+            required = tuple(int(part) for part in version.split('.'))
+            requirements.append((required, binary))
+            minimum = max(minimum, required)
+if limit:
+    maximum = tuple(int(part) for part in limit.split('.'))
+    incompatible = [f"{binary.name}: {'.'.join(map(str, required))}" for required, binary in requirements
+                    if (required + (0,) * 3)[:3] > (maximum + (0,) * 3)[:3]]
+    if incompatible:
+        raise SystemExit(f"Native dependencies exceed macOS {limit}: " + ', '.join(incompatible))
+manifest.write_text('\n'.join(updated) + '\n')
 plist = app / 'Contents/Info.plist'
 with plist.open('rb') as stream:
     info = plistlib.load(stream)

@@ -304,9 +304,17 @@ class AnimatedEmojiMessageRenderTest {
             assertEquals(transfer.acquired.first(), transfer.released.single())
             assertTrue(transfer.cancellations.isEmpty(), "Cancellation must wait for the old false-acceptance barrier.")
             transfer.windows.first().accept(ChatResult(state.value.mediaFiles.getValue(FILE_ID)))
-            assertTrue(transfer.cancellations.isEmpty(), "The fresh compatible owner keeps the accepted finite window alive.")
-            assertEquals(listOf(FILE_ID), transfer.windows.map { it.fileId },
-                "Reactivation shares already accepted bytes without cancelling or duplicating the native window.")
+            assertTrue(transfer.cancellations.isEmpty(), "A reactivated full-file owner must retain the compatible accepted native range.")
+            assertEquals(listOf(FILE_ID), transfer.windows.map { it.fileId }, "Reactivation must share existing native work instead of downloading the same range again.")
+            active.value = false
+            scene.settledFrame()
+            assertEquals(listOf(FILE_ID), transfer.cancellations.toList())
+            assertEquals(transfer.acquired.toList(), transfer.released.toList(), "An inactive page must release every artwork owner before cancelling its now-unneeded native range.")
+            active.value = true
+            scene.settledFrame()
+            assertEquals(3, transfer.acquired.size, "Reactivation after cancellation must obtain a fresh live ARTWORK owner.")
+            assertEquals(listOf(FILE_ID, FILE_ID), transfer.windows.map { it.fileId }, "After its own retirement, a still-visible owner may resume only after native cancellation is acknowledged.")
+            transfer.windows.last().accept(ChatResult(state.value.mediaFiles.getValue(FILE_ID)))
             assertEquals(listOf(FILE_ID), outlines, "An available offline native outline must not be fetched again.")
             state.value = state.value.copy(mediaFiles = mapOf(FILE_ID to readyFile(path)))
             transfer.observe(state.value.mediaFiles.getValue(FILE_ID))
@@ -320,7 +328,7 @@ class AnimatedEmojiMessageRenderTest {
                 visible.value = true
                 scene.settledFrame()
             }
-            assertEquals(listOf(FILE_ID), transfer.windows.map { it.fileId }, "A ready local asset must stay visible without any extra native download.")
+            assertEquals(listOf(FILE_ID, FILE_ID), transfer.windows.map { it.fileId }, "A ready local asset must stay visible without any extra native download.")
             assertEquals(listOf(FILE_ID), outlines)
             assertTrue(isGreen(ready[originalCanvas.center.x.roundToInt(), originalCanvas.center.y.roundToInt()]))
         }

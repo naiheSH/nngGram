@@ -117,6 +117,9 @@ def build(args):
         'artifacts': [{'name': p.name, 'bytes': p.stat().st_size, 'sha256': digest(p)} for p in artifacts],
         'verificationDirectory': reports.name,
     }
+    if mac:
+        import plistlib
+        metadata['minimumMacOSVersion'] = plistlib.loads((app / 'Contents/Info.plist').read_bytes())['LSMinimumSystemVersion']
     (output / 'build-info.json').write_text(json.dumps(metadata, indent=2) + '\n')
     (output / 'SHA256SUMS.txt').write_text(''.join(f"{p['sha256']}  {p['name']}\n" for p in metadata['artifacts']))
     print('Desktop artifacts:', output, flush=True)

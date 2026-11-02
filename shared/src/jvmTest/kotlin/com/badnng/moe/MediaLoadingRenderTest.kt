@@ -44,15 +44,13 @@ class MediaLoadingRenderTest {
             val snapshot = mutableStateOf(ChatSnapshot(token = ChatToken(1, 1, 10)))
             val visible = mutableStateOf(true)
             val active = mutableStateOf(true)
-            val transfer = ArtworkDownloadBrokerFixture { id ->
-                snapshot.value.mediaFiles[id] ?: if (id == pending.id) pending else checkNotNull(media.thumbnail)
-            }
-            transfer.seedPendingUser(snapshot.value.token, pending.id)
-            transfer.use {
+            var downloads = 0
+            val automaticVisibility = mutableListOf<Pair<Long, Boolean>>()
             mediaScene(density, dark) {
-                RemoteMedia(media, snapshot.value, transfer.actions(),
+                RemoteMedia(media, snapshot.value, ChatFeatureActions(downloadFile = { _, _ -> downloads++ },
+                    automaticMedia = { _, messageId, visible -> automaticVisibility += messageId to visible }),
                     visible.value, active.value, Modifier.size(320.dp, 160.dp), photoBackground = true,
-                    contentScale = ContentScale.Crop)
+                    contentScale = ContentScale.Crop, messageId = 99L)
             }.use { scene ->
                 scene.awaitDescription("照片模糊底图")
                 val ring = scene.awaitDescription("图片加载中")
@@ -78,7 +76,9 @@ class MediaLoadingRenderTest {
                 assertTrue(scene.descriptions("图片加载中").isEmpty())
                 assertTrue(scene.descriptions("照片模糊底图").isEmpty(), "The ready Crop branch retains its independent clear geometry.")
                 assertEquals(GREEN, ready[(48 * density).roundToInt(), (92 * density).roundToInt()])
-                assertEquals(1, transfer.windows.size, "Artwork joins the seeded in-flight download without an additional native window.")
+                assertEquals(0, downloads, "Ready native thumbnails and an in-flight original need no additional download.")
+                assertEquals(listOf(99L to true), automaticVisibility,
+                    "Like PhotoMessageContent, an inline photo routes its message identity through AUTO visibility rather than a generic ARTWORK download.")
                 export(ready, "photo-ready-${theme(dark)}-$density")
 
                 snapshot.value = snapshot.value.copy(mediaFiles = emptyMap(), fileErrors = mapOf(1 to ChatError.REQUEST_FAILED))
@@ -91,8 +91,8 @@ class MediaLoadingRenderTest {
                 visible.value = false
                 scene.settledFrame(3)
                 assertTrue(scene.descriptions("图片加载中").isEmpty())
+                assertEquals(99L to false, automaticVisibility.last(), "Leaving the photo must revoke its AUTO visibility.")
             }
-        }
         }
     }
 

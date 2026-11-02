@@ -23,6 +23,18 @@ class WorkflowTests(unittest.TestCase):
         self.assertIn('compression-level: 0', text)
         self.assertIn('queue: max', text)
 
+    def test_tdlib_dependency_retention_precedes_application_tests(self):
+        action = (ROOT / '.github/actions/prepare-windows-native/action.yml').read_text(encoding='utf-8')
+        workflow = (ROOT / '.github/workflows/ci.yml').read_text(encoding='utf-8')
+        self.assertNotIn('restore-keys:', action)
+        self.assertNotIn('secrets.', action)
+        self.assertIn('Reject any nonexact cache match', action)
+        self.assertIn('retention-days: 90', action)
+        self.assertLess(action.index('actions/cache/save@'), action.index('actions/upload-artifact@'))
+        self.assertIn('GenerateTdlibNativeMetadata.java $env:GITHUB_WORKSPACE --check', action)
+        checks = workflow.split('  native:')[0]
+        self.assertLess(checks.index('uses: ./.github/actions/prepare-native'), checks.index('Run portable business and UI regressions'))
+
     def test_yaml_if_parser_available(self):
         try:
             import yaml

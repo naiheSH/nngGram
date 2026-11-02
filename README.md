@@ -177,6 +177,8 @@ Windows 使用 PowerShell 7.2+ 和 MSYS2 UCRT64。只有可选 Native Image 还�
 | Linux x64 | `ubuntu-24.04` | tar.gz、DEB |
 | Linux arm64 | `ubuntu-24.04-arm` | tar.gz、DEB |
 
+macOS CI 固定使用 macOS 15 runner 与 `MACOSX_DEPLOYMENT_TARGET=15.0`，打包时逐个检查原生依赖；依赖要求高于 15.0 会直接失败，不会静默提高最低系统版本。产物的 `build-info.json` 记录实际最低系统要求。
+
 默认 `checks` 矩阵不接触应用 Secrets：五个目标都执行脚本与安装器契约、完整 JVM/UI 回归、打包后真实 TDLib 验收，并上传明确标为 `preview-` 的无凭据预览包。测试失败会阻止正式打包，不通过 `continue-on-error` 隐藏。Linux 使用 Xvfb；各原生缓存按 OS、架构、runner 镜像、源码 pin 和构建脚本隔离。
 
 正式 `distributions` 矩阵须由仓库管理员设置：
@@ -218,6 +220,10 @@ Windows 使用 PowerShell 7.2+ 和 MSYS2 UCRT64。只有可选 Native Image 还�
 3. 修复上游 API 变化引起的编译问题，跑 JVM/native/media 检查，再运行生成 EXE 的离线烟雾测试，通过后才分发。
 
 现有本地 TDLib 源码目录若与新 pin 不一致，构建脚本会停下，避免悄悄复用旧文件。TDLib 接口变化可能需要修改客户端代码，CI 不能保证任意新版直接兼容。应用凭据不因 TDLib 升级而重新申请。
+
+CI 会在 TDLib 编译完成后、应用测试之前立即保存完整依赖缓存，并上传以 `tdlib-windows-x64-` 开头的独立 ZIP 产物，保留 90 天；后面的应用测试失败也不影响已保存的依赖。包内含对应版本的 `tdjni.dll`、Java 绑定、依赖 DLL、许可证和逐文件校验信息，不含 FFmpeg、应用凭据或账号数据。
+
+后续构建只在源码提交、实际工具链及构建脚本完全匹配时复用缓存；恢复时核验哈希、架构和 Java/JNI 来源，并重新生成 Native Image 元数据。缓存可能被 GitHub 淘汰，未命中时仍从源码构建。独立 ZIP 在该次 Actions 的 Artifacts 中下载，不提交到源码仓库。JVM 测试结果另外保留 14 天，方便失败时查看完整断言。
 
 ## 源码与许可
 

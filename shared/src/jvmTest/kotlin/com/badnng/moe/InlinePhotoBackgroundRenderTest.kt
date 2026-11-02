@@ -108,7 +108,7 @@ class InlinePhotoBackgroundRenderTest {
     @Test
     fun fullFallbackNoSourceInactiveAndOptOutBranchesDoNotInventOrDownloadBackgrounds() = sources { full, _ ->
         for (mode in listOf(ColorSchemeMode.Light, ColorSchemeMode.Dark)) for (density in listOf(1f, 1.25f)) {
-            val fallback = Fixture(full, null, density, mode)
+            val fallback = Fixture(full, null, density, mode, hasNativeThumbnail = true)
             fallback.scene().use { scene ->
                 val canvas = scene.awaitDescription("照片模糊底图")
                 scene.awaitDescription("聊天图片")
@@ -138,11 +138,14 @@ class InlinePhotoBackgroundRenderTest {
         full: Path?, thumbnail: Path?, val density: Float, val mode: ColorSchemeMode,
         val scale: ContentScale = ContentScale.Fit, val sourceWidth: Int = 64, val sourceHeight: Int = 48,
         val canvasWidth: Int = 298, val background: Boolean = true, val visible: Boolean = true,
+        val hasNativeThumbnail: Boolean = thumbnail != null,
     ) {
         var downloads = 0
         var neutral = 0
         val media = MessageMedia(MediaFile(1, localPath = full?.toString(), downloaded = full != null),
-            thumbnail = MediaFile(2, localPath = thumbnail?.toString(), downloaded = thumbnail != null, canDownload = thumbnail != null),
+            // An absent native source is different from an existing thumbnail awaiting download.
+            thumbnail = if (hasNativeThumbnail) MediaFile(2, localPath = thumbnail?.toString(),
+                downloaded = thumbnail != null, canDownload = true) else null,
             width = sourceWidth, height = sourceHeight, thumbnailFormat = MediaFormat.PHOTO)
         val snapshot = ChatSnapshot(enabled = true, token = ChatToken(1, 1, 10), selected = ChatItem(10, "Synthetic photo"))
         fun scene() = ComposePixelScene((320f * density).roundToInt(), (140f * density).roundToInt()) {
@@ -152,7 +155,8 @@ class InlinePhotoBackgroundRenderTest {
                     neutral = MiuixTheme.colorScheme.surfaceContainer.toArgb()
                     Box(Modifier.fillMaxSize().padding(10.dp)) {
                         RemoteMedia(media, snapshot, ChatFeatureActions(downloadFile = { _, _ -> downloads++ }), visible, false,
-                            modifier = Modifier.size(canvasWidth.dp, 100.dp), contentScale = scale, photoBackground = background)
+                            modifier = Modifier.size(canvasWidth.dp, 100.dp), contentScale = scale,
+                            photoBackground = background, messageId = 99L)
                     }
                 }
             }

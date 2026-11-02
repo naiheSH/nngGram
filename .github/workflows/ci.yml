@@ -74,6 +74,8 @@ jobs:
           path: |
             desktopApp/build/reports/tests/
             shared/build/reports/tests/
+            desktopApp/build/test-results/
+            shared/build/test-results/
           if-no-files-found: warn
           retention-days: 14
   native:

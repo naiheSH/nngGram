@@ -37,7 +37,11 @@ jni_build="$build/jni-build"
 java_build="$build/java-build"
 java_source="$source/example/java"
 openssl_root=
-if [ "$os" = Darwin ]; then openssl_root=$(brew --prefix openssl); fi
+if [ "$os" = Darwin ]; then
+  openssl_root=$(brew --prefix openssl)
+  # CMake uses this environment variable to initialize both JNI build targets.
+  export MACOSX_DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET:-15.0}"
+fi
 cmake -S "$source" -B "$jni_build" -G Ninja -DCMAKE_BUILD_TYPE=Release "-DOPENSSL_ROOT_DIR=$openssl_root" \
   -DTD_ENABLE_JNI=ON -DTD_ENABLE_LTO=OFF -DCMAKE_INSTALL_PREFIX="$java_source/td" -DJAVA_HOME="$jdk"
 cmake --build "$jni_build" --target install --parallel "${JOBS:-4}"

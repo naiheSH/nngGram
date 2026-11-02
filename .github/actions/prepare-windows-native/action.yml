@@ -1,0 +1,77 @@
+name: Prepare pinned native dependencies
+description: Build the pinned official TDLib Java/JNI binding using the UCRT64 toolchain.
+runs:
+  using: composite
+  steps:
+    - name: Select Python for dependency archive validation
+      uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+      with:
+        python-version: '3.12'
+    - name: Install JDK for TDLib and Gradle
+      uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+      with:
+        distribution: zulu
+        java-version: '21'
+    - name: Install MSYS2 UCRT64 build tools
+      id: msys
+      uses: msys2/setup-msys2@ec48f7c5447b3140e2b088413ae3a55687bccb6e # v2
+      with:
+        location: ${{ runner.temp }}
+        msystem: UCRT64
+        update: true
+        install: >-
+          git gperf mingw-w64-ucrt-x86_64-gcc
+          mingw-w64-ucrt-x86_64-cmake mingw-w64-ucrt-x86_64-ninja
+          mingw-w64-ucrt-x86_64-openssl mingw-w64-ucrt-x86_64-zlib
+    - name: Compute exact TDLib source and toolchain cache identity
+      id: identity
+      shell: pwsh
+      run: python -B .github/scripts/tdlib_bundle.py identity --identity "$env:RUNNER_TEMP/tdlib-build-identity.json" --msys '${{ steps.msys.outputs.msys2-location }}' --jdk $env:JAVA_HOME
+    - name: Restore complete exact TDLib dependency cache
+      id: cache
+      uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+      with:
+        path: ${{ runner.temp }}/tdlib-bundle-cache
+        key: ${{ steps.identity.outputs.cache_key }}
+        fail-on-cache-miss: false
+    - name: Reject any nonexact cache match
+      if: steps.cache.outputs.cache-matched-key != '' && steps.cache.outputs.cache-hit != 'true'
+      shell: pwsh
+      run: throw 'Refusing a partial TDLib cache match.'
+    - name: Validate and install restored TDLib dependencies
+      if: steps.cache.outputs.cache-hit == 'true'
+      shell: pwsh
+      run: python -B .github/scripts/tdlib_bundle.py restore --identity "$env:RUNNER_TEMP/tdlib-build-identity.json" --cache "$env:RUNNER_TEMP/tdlib-bundle-cache" --directory native/windows-x64
+    - name: Build pinned TDLib bundle on exact cache miss
+      if: steps.cache.outputs.cache-hit != 'true'
+      shell: pwsh
+      run: ./scripts/build-tdlib.ps1 -MsysRoot '${{ steps.msys.outputs.msys2-location }}' -Jdk $env:JAVA_HOME -Jobs 2
+    - name: Validate and stage the complete newly built dependency bundle
+      if: steps.cache.outputs.cache-hit != 'true'
+      shell: pwsh
+      run: python -B .github/scripts/tdlib_bundle.py export --identity "$env:RUNNER_TEMP/tdlib-build-identity.json" --cache "$env:RUNNER_TEMP/tdlib-bundle-cache" --directory native/windows-x64
+    # Save now, before application compilation/tests can fail. No post-job cache save dependency.
+    - name: Save successfully compiled TDLib immediately
+      if: steps.cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+      with:
+        path: ${{ runner.temp }}/tdlib-bundle-cache
+        key: ${{ steps.identity.outputs.cache_key }}
+    - name: Create standalone verified TDLib dependency archive
+      shell: pwsh
+      run: python -B .github/scripts/tdlib_bundle.py archive --identity "$env:RUNNER_TEMP/tdlib-build-identity.json" --cache "$env:RUNNER_TEMP/tdlib-bundle-cache" --directory "$env:RUNNER_TEMP/tdlib-bundle-artifact"
+    - name: Retain standalone TDLib dependencies even if app tests fail
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      with:
+        name: tdlib-windows-x64-${{ steps.identity.outputs.commit }}-${{ steps.identity.outputs.fingerprint }}-${{ github.job }}-${{ github.run_id }}-${{ github.run_attempt }}
+        path: ${{ runner.temp }}/tdlib-bundle-artifact/
+        if-no-files-found: error
+        compression-level: 0
+        retention-days: 90
+    - name: Regenerate and verify metadata for the exact restored Java binding
+      shell: pwsh
+      run: |
+        & "$env:JAVA_HOME/bin/java.exe" scripts/GenerateTdlibNativeMetadata.java $env:GITHUB_WORKSPACE
+        if ($LASTEXITCODE -ne 0) { throw 'TDLib metadata generation failed.' }
+        & "$env:JAVA_HOME/bin/java.exe" scripts/GenerateTdlibNativeMetadata.java $env:GITHUB_WORKSPACE --check
+        if ($LASTEXITCODE -ne 0) { throw 'TDLib metadata verification failed.' }
